@@ -1,0 +1,206 @@
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { api, errMessage } from "./apiClient";
+import { BRANCH_POLL_MS, STATUS_POLL_MS } from "./constants";
+import { dispatchApp, useAppStore } from "./store/appStore";
+import type { BranchesResponse, StatusResponse } from "./types";
+import "./App.css";
+
+export default function App() {
+  const {
+    items,
+    branchError,
+    branchesLoading,
+    status,
+    query,
+    open,
+    actionError,
+    loading,
+  } = useAppStore();
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const loadBranches = useCallback(async () => {
+    dispatchApp({ type: "BRANCHES_REQUEST" });
+    try {
+      const data = await api<BranchesResponse>("/api/branches");
+      dispatchApp({ type: "BRANCHES_SUCCESS", items: data.items ?? [] });
+    } catch (e) {
+      dispatchApp({ type: "BRANCHES_FAILURE", error: errMessage(e) });
+    }
+  }, []);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const data = await api<StatusResponse>("/api/status");
+      dispatchApp({
+        type: "STATUS_SUCCESS",
+        running: !!data.running,
+        activeTag: data.activeTag ?? null,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBranches();
+    const id = setInterval(() => void loadBranches(), BRANCH_POLL_MS);
+    return () => clearInterval(id);
+  }, [loadBranches]);
+
+  useEffect(() => {
+    void loadStatus();
+    const id = setInterval(() => void loadStatus(), STATUS_POLL_MS);
+    return () => clearInterval(id);
+  }, [loadStatus]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      const target = e.target;
+      if (
+        wrapRef.current &&
+        target instanceof Node &&
+        !wrapRef.current.contains(target)
+      ) {
+        dispatchApp({ type: "OPEN_SET", open: false });
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (x) =>
+        x.tag.toLowerCase().includes(q) || x.branch.toLowerCase().includes(q)
+    );
+  }, [items, query]);
+
+  /** Тег выбран, если строка точно совпадает с тегом из списка (в т.ч. вбит вручную). */
+  const effectiveTag = useMemo(() => {
+    const q = query.trim();
+    const hit = items.find((i) => i.tag === q);
+    return hit ? hit.tag : null;
+  }, [query, items]);
+
+  const buttonMode = useMemo(() => {
+    if (status.running) return "stop";
+    if (effectiveTag) return "start";
+    return "idle";
+  }, [status.running, effectiveTag]);
+
+  async function onPrimaryClick() {
+    dispatchApp({ type: "ACTION_ERROR_SET", error: null });
+    if (status.running) {
+      dispatchApp({ type: "LOADING_SET", loading: true });
+      try {
+        await api("/api/stop", { method: "POST" });
+        await loadStatus();
+      } catch (e) {
+        dispatchApp({ type: "ACTION_ERROR_SET", error: errMessage(e) });
+      } finally {
+        dispatchApp({ type: "LOADING_SET", loading: false });
+      }
+      return;
+    }
+    if (!effectiveTag) return;
+    dispatchApp({ type: "LOADING_SET", loading: true });
+    try {
+      await api("/api/start", {
+        method: "POST",
+        body: JSON.stringify({ tag: effectiveTag }),
+      });
+      await loadStatus();
+    } catch (e) {
+      dispatchApp({ type: "ACTION_ERROR_SET", error: errMessage(e) });
+    } finally {
+      dispatchApp({ type: "LOADING_SET", loading: false });
+    }
+  }
+
+  function pickItem(tag: string) {
+    dispatchApp({ type: "PICK_TAG", tag });
+  }
+
+  const primaryLabel = status.running
+    ? "Выключить проект"
+    : "Поднять проект";
+
+  const btnClass =
+    buttonMode === "idle"
+      ? "btn btn--idle"
+      : buttonMode === "start"
+        ? "btn btn--start"
+        : "btn btn--stop";
+
+  return (
+    <div className="page">
+      <h1 className="title">Выберите тег образа для запуска</h1>
+
+      <div className="combo-wrap" ref={wrapRef}>
+        <input
+          className="search"
+          type="search"
+          placeholder="Поиск по тегу или ветке…"
+          value={query}
+          onChange={(e) => {
+            dispatchApp({ type: "QUERY_CHANGE", query: e.target.value });
+            dispatchApp({ type: "OPEN_SET", open: true });
+          }}
+          onFocus={() => dispatchApp({ type: "OPEN_SET", open: true })}
+          autoComplete="off"
+          aria-expanded={open}
+          aria-controls="branch-listbox"
+        />
+        {open && filtered.length > 0 && (
+          <ul id="branch-listbox" className="list" role="listbox">
+            {filtered.map((x) => (
+              <li
+                key={x.branch}
+                role="option"
+                aria-selected={effectiveTag === x.tag}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pickItem(x.tag)}
+              >
+                {x.tag}
+                <small>{x.branch}</small>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <button
+        type="button"
+        className="btn btn--refresh"
+        disabled={branchesLoading}
+        onClick={() => void loadBranches()}
+      >
+        {branchesLoading ? "…" : "Обновить список веток"}
+      </button>
+
+      {branchError && <p className="error">{branchError}</p>}
+      {!branchError && items.length === 0 && (
+        <p className="hint">Веток с префиксом release/2… пока нет или список пуст.</p>
+      )}
+
+      <button
+        type="button"
+        className={btnClass}
+        disabled={loading || (!status.running && !effectiveTag) || !!branchError}
+        onClick={() => void onPrimaryClick()}
+      >
+        {loading ? "…" : primaryLabel}
+      </button>
+
+      {actionError && <p className="error">{actionError}</p>}
+
+      <p className="meta">
+        Сейчас в .env записан тег:{" "}
+        <strong>{status.activeTag ?? "—"}</strong>
+        {status.running ? " · compose запущен" : ""}
+      </p>
+    </div>
+  );
+}

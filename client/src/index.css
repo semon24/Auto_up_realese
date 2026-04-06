@@ -1,0 +1,27 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #e6edf3;
+  -webkit-font-smoothing: antialiased;
+  /* Плитка 120×120 с 8 утками + второй слой со сдвигом — плотный серый фон */
+  background-color: #0f1419;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cdefs%3E%3Cg id='u'%3E%3Cellipse cx='11' cy='14' rx='9' ry='7' fill='%236e7681'/%3E%3Ccircle cx='21' cy='10' r='4.5' fill='%236e7681'/%3E%3Cpath d='M25 10 L30 11 L25 12.5 Z' fill='%236e7681'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23u' opacity='0.12' transform='translate%280 0%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%2860 8%29 rotate%2822 11 12%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%2824 44%29 rotate%28-15 11 12%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%2888 36%29 rotate%2818 11 12%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%282 76%29 rotate%28-10 11 12%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%2866 72%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%2812 100%29 rotate%2828 11 12%29'/%3E%3Cuse href='%23u' opacity='0.12' transform='translate%2872 96%29 rotate%28-18 11 12%29'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cdefs%3E%3Cg id='v'%3E%3Cellipse cx='11' cy='14' rx='9' ry='7' fill='%238b949e'/%3E%3Ccircle cx='21' cy='10' r='4.5' fill='%238b949e'/%3E%3Cpath d='M25 10 L30 11 L25 12.5 Z' fill='%238b949e'/%3E%3C/g%3E%3C/defs%3E%3Cuse href='%23v' opacity='0.09' transform='translate%280 0%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%2860 8%29 rotate%2822 11 12%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%2824 44%29 rotate%28-15 11 12%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%2888 36%29 rotate%2818 11 12%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%282 76%29 rotate%28-10 11 12%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%2866 72%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%2812 100%29 rotate%2828 11 12%29'/%3E%3Cuse href='%23v' opacity='0.09' transform='translate%2872 96%29 rotate%28-18 11 12%29'/%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  background-position:
+    0 0,
+    60px 60px;
+  background-repeat: repeat;
+}

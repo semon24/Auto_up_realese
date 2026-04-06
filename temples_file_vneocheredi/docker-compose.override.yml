@@ -1,0 +1,62 @@
+services:
+  rabbitmq:
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+  postgres:
+    ports:
+      - "5632:5432"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Postgres/Backups:/var/backups
+  master-postgres:
+    ports:
+      - "5532:5432"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Postgres/Backups:/var/backups
+  filestorage:
+    ports:
+      - "52959:8080"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/FileStorage/Data:/app/Data
+      - ${CONTAINER_DATA_PATH}/ContainersData/FileStorage/Settings/appsettings.json:/app/appsettings.json
+  speech:
+    ports:
+      - "52303:8080"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Speech/Data:/app/Data
+      - ${CONTAINER_DATA_PATH}/ContainersData/Speech/Settings/appsettings.json:/app/appsettings.json
+  server:
+    ports:
+      - "53800:8080"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Server/Data:/app/Data
+      - ${CONTAINER_DATA_PATH}/ContainersData/Server/Settings/appsettings.json:/app/appsettings.json
+
+  admin:
+    ports:
+      - "65401:8080"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Admin/Files:/app/Files
+      - ${CONTAINER_DATA_PATH}/ContainersData/Admin/Data:/app/Data
+      - ${CONTAINER_DATA_PATH}/ContainersData/Admin/Settings/appsettings.json:/app/appsettings.json
+
+  call:
+    ports:
+      - "53620:8080"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Call/Data:/app/Data
+      - ${CONTAINER_DATA_PATH}/ContainersData/Call/Settings/appsettings.json:/app/appsettings.json
+
+  portal:
+    ports:
+      - "53801:8080"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Rdv/Data:/app/Data
+      - ${CONTAINER_DATA_PATH}/ContainersData/Rdv/Settings/appsettings.json:/app/appsettings.json
+  
+  telemetry-collector:
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    volumes:
+      - ${CONTAINER_DATA_PATH}/ContainersData/Telemetry/sidecar-otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml

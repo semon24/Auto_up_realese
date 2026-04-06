@@ -1,0 +1,14 @@
+{
+  "name": "auto-up-release",
+  "private": true,
+  "workspaces": ["client"],
+  "scripts": {
+    "dev": "concurrently -n api,client -c blue,magenta \"dotnet watch run --project Api\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "dotnet run --project Api --configuration Release",
+    "start:client": "npm run dev -w client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

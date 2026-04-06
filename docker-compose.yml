@@ -1,0 +1,40 @@
+# Панель: веб (nginx + React) и API в разных контейнерах.
+# UI: http://localhost:8080  (nginx проксирует /api → api:3001)
+#
+# Ваше приложение поднимайте отдельно, из каталога deploy/:
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+#
+# API пишет IMAGE_TAG в deploy/.env и вызывает docker compose на ХОСТЕ через смонтированный сокет.
+# ВАЖНО: доступ к docker.sock даёт контейнеру api права управлять Docker на машине — только доверенная среда.
+
+services:
+  api:
+    build:
+      context: ./Api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      COMPOSE_DIR: /host/deploy
+      ENV_FILE: /host/deploy/.env
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      BRANCH_PREFIX: ${BRANCH_PREFIX:-release/2}
+      # Swagger UI: ENABLE_SWAGGER=true в panel.env (или ASPNETCORE_ENVIRONMENT=Development)
+      EnableSwagger: ${ENABLE_SWAGGER:-false}
+    volumes:
+      # Только каталог compose + .env вашего приложения (отдельный стек — deploy/docker-compose.yml).
+      - ./deploy:/host/deploy
+      # Управление Docker на хосте (осторожно: полный доступ к демону).
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  web:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api

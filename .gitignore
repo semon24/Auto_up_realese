@@ -1,0 +1,11 @@
+node_modules/
+client/dist/
+
+# Build / IDE
+**/bin/
+**/obj/
+.vs/
+
+# Secrets & local env
+.env
+*.env
