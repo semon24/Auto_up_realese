@@ -5,7 +5,7 @@ EnvLoader.LoadOptionalEnvFiles();
 
 var builder = WebApplication.CreateBuilder(args);
 
-var port = Environment.GetEnvironmentVariable("PORT");
+var port = builder.Configuration["PORT"];
 if (!string.IsNullOrWhiteSpace(port))
     builder.WebHost.UseUrls($"http://0.0.0.0:{port.Trim()}");
 
@@ -42,32 +42,33 @@ if (swaggerEnabled)
 }
 
 var config = app.Configuration;
-var env = app.Environment;
 
-// В Docker можно задать REPO_ROOT, если в конфиге относительные пути к deploy.
-var repoRootEnv = Environment.GetEnvironmentVariable("REPO_ROOT")?.Trim();
-var repoRoot = !string.IsNullOrWhiteSpace(repoRootEnv)
-    ? Path.GetFullPath(repoRootEnv)
-    : Path.GetFullPath(Path.Combine(env.ContentRootPath, ".."));
+var composeDir = string.IsNullOrWhiteSpace(config["COMPOSE_DIR"])
+    ? "/opt/vneocheredi"
+    : config["COMPOSE_DIR"]!.Trim();
 
-string ResolvePath(string? value, string root, string defaultRelative)
-{
-    if (string.IsNullOrWhiteSpace(value))
-        return Path.Combine(root, defaultRelative);
-    var v = value.Trim();
-    return Path.IsPathRooted(v) ? Path.GetFullPath(v) : Path.GetFullPath(Path.Combine(root, v));
-}
+if (!Path.IsPathRooted(composeDir))
+    throw new InvalidOperationException("COMPOSE_DIR должен быть абсолютным путем до папки с docker-compose.yml.");
 
-var composeDir = ResolvePath(config["COMPOSE_DIR"], repoRoot, "deploy");
-var envFile = !string.IsNullOrWhiteSpace(config["ENV_FILE"]?.Trim())
-    ? ResolvePath(config["ENV_FILE"], repoRoot, "deploy")
-    : Path.Combine(composeDir, ".env");
+composeDir = Path.GetFullPath(composeDir);
+
+var envFile = string.IsNullOrWhiteSpace(config["ENV_FILE"])
+    ? Path.Combine(composeDir, ".env")
+    : config["ENV_FILE"]!.Trim();
+
+if (!Path.IsPathRooted(envFile))
+    throw new InvalidOperationException("ENV_FILE должен быть абсолютным путем до файла .env целевого приложения.");
+
+envFile = Path.GetFullPath(envFile);
+if (!string.Equals(Path.GetFileName(envFile), ".env", StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException("ENV_FILE должен указывать на файл .env целевого приложения.");
 var imageEnvKey = config["IMAGE_ENV_KEY"] ?? "IMAGE_TAG";
 var branchPrefix = config["BRANCH_PREFIX"] ?? "release/2";
 var portAllocationOptions = config.GetSection("PortAllocation").Get<PortAllocationOptions>() ?? new PortAllocationOptions();
 var ghOwner = config["GITHUB_OWNER"] ?? "";
 var ghRepo = config["GITHUB_REPO"] ?? "";
 var ghToken = config["GITHUB_TOKEN"] ?? "";
+var serviceLinkEnvKeys = config.GetSection("ServiceLinkEnvKeys").Get<ServiceLinkEnvKeys>() ?? new ServiceLinkEnvKeys();
 
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
 
@@ -90,7 +91,8 @@ app.MapGet("/api/status", async () =>
     {
         var running = await DockerCompose.IsRunningAsync(composeDir);
         var activeTag = EnvFile.ReadTag(envFile, imageEnvKey);
-        return Results.Json(new { running, activeTag });
+        var serviceLinks = running ? DeployEnvLinks.TryRead(envFile, serviceLinkEnvKeys) : null;
+        return Results.Json(new { running, activeTag, serviceLinks });
     }
     catch (Exception e)
     {
@@ -149,7 +151,8 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
         await EnvFile.WriteTagAsync(envFile, imageEnvKey, tag);
         await DockerCompose.RunAsync(composeDir, "up", "-d");
         var running = await DockerCompose.IsRunningAsync(composeDir);
-        return Results.Json(new { ok = true, running });
+        var serviceLinks = running ? DeployEnvLinks.TryRead(envFile, serviceLinkEnvKeys) : null;
+        return Results.Json(new { ok = true, running, serviceLinks });
     }
     catch (Exception e)
     {

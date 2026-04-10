@@ -5,7 +5,6 @@ namespace AutoUpRelease.Api;
 
 public static class HostPortProbe
 {
-    /// <summary>Проверяет, можно ли на хосте занять TCP-порт (bind на 0.0.0.0).</summary>
     public static bool IsTcpPortAvailable(int port)
     {
         if (port is < 1 or > 65535) return false;

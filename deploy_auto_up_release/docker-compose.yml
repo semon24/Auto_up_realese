@@ -1,0 +1,40 @@
+services:
+  api-auto-up-release:
+    image: registry.ft-soft.ru/devops/api-auto-up-release:latest
+    ports:
+      - "3001:3001"
+    # Подхватывает GITHUB_*, IMAGE_ENV_KEY и т.д. из файла .env рядом с этим compose
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      COMPOSE_DIR: ${COMPOSE_DIR:-/opt/vneocheredi}
+      ENV_FILE: ${ENV_FILE:-/opt/vneocheredi/.env}
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      BRANCH_PREFIX: ${BRANCH_PREFIX:-release/2}
+      IMAGE_ENV_KEY: ${IMAGE_ENV_KEY:-IMAGE_TAG}
+      # Swagger UI: ENABLE_SWAGGER=true в panel.env (или ASPNETCORE_ENVIRONMENT=Development)
+      EnableSwagger: ${ENABLE_SWAGGER:-false}
+    volumes:
+      # На сервере задайте в .env: DEPLOY_ROOT=/opt/vneocheredi_auto_release_up/deploy_vneocheredi
+      - ${DEPLOY_ROOT:-../deploy}:/host/deploy
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - network-auto-up-release
+
+  web-auto-up-release:
+    image: registry.ft-soft.ru/devops/web-auto-up-release:latest
+    ports:
+      # nginx в образе слушает 80 (client/Dockerfile EXPOSE 80)
+      - "8085:80"
+    depends_on:
+      - api-auto-up-release
+    networks:
+      - network-auto-up-release
+
+networks:
+  network-auto-up-release:
+    name: network-auto-up-release
+    external: true

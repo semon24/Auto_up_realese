@@ -1,10 +1,14 @@
-import type { BranchItem } from "./types";
+import type { BranchItem, ServiceLinks } from "./types";
 
 export interface AppState {
   items: BranchItem[];
   branchError: string | null;
   branchesLoading: boolean;
-  status: { running: boolean; activeTag: string | null };
+  status: {
+    running: boolean;
+    activeTag: string | null;
+    serviceLinks: ServiceLinks | null;
+  };
   query: string;
   open: boolean;
   actionError: string | null;
@@ -15,7 +19,7 @@ export const initialAppState: AppState = {
   items: [],
   branchError: null,
   branchesLoading: false,
-  status: { running: false, activeTag: null },
+  status: { running: false, activeTag: null, serviceLinks: null },
   query: "",
   open: false,
   actionError: null,
@@ -26,7 +30,12 @@ export type AppAction =
   | { type: "BRANCHES_REQUEST" }
   | { type: "BRANCHES_SUCCESS"; items: BranchItem[] }
   | { type: "BRANCHES_FAILURE"; error: string }
-  | { type: "STATUS_SUCCESS"; running: boolean; activeTag: string | null }
+  | {
+      type: "STATUS_SUCCESS";
+      running: boolean;
+      activeTag: string | null;
+      serviceLinks?: ServiceLinks | null;
+    }
   | { type: "QUERY_CHANGE"; query: string }
   | { type: "OPEN_SET"; open: boolean }
   | { type: "ACTION_ERROR_SET"; error: string | null }
@@ -49,7 +58,11 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "STATUS_SUCCESS":
       return {
         ...state,
-        status: { running: action.running, activeTag: action.activeTag },
+        status: {
+          running: action.running,
+          activeTag: action.activeTag,
+          serviceLinks: action.serviceLinks ?? null,
+        },
       };
     case "QUERY_CHANGE":
       return { ...state, query: action.query };

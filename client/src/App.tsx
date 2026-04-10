@@ -35,6 +35,7 @@ export default function App() {
         type: "STATUS_SUCCESS",
         running: !!data.running,
         activeTag: data.activeTag ?? null,
+        serviceLinks: data.serviceLinks ?? null,
       });
     } catch {
       /* ignore */
@@ -201,6 +202,58 @@ export default function App() {
         <strong>{status.activeTag ?? "—"}</strong>
         {status.running ? " · compose запущен" : ""}
       </p>
+
+      {status.running && status.serviceLinks && (
+        <div className="service-links">
+          <p className="service-links__title">Сервисы</p>
+          <ul className="service-links__list">
+            {status.serviceLinks.admin && (
+              <li>
+                <a
+                  href={status.serviceLinks.admin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Админка
+                </a>
+              </li>
+            )}
+            {status.serviceLinks.server && (
+              <li>
+                <a
+                  href={status.serviceLinks.server}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Сервис
+                </a>
+              </li>
+            )}
+            {status.serviceLinks.call && (
+              <li>
+                <a
+                  href={status.serviceLinks.call}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Колл
+                </a>
+              </li>
+            )}
+            {status.serviceLinks.portal && (
+              <li>
+                <a
+                  href={status.serviceLinks.portal}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Портал
+                </a>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
