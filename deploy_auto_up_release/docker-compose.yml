@@ -13,6 +13,9 @@ services:
       GITHUB_OWNER: ${GITHUB_OWNER:-}
       GITHUB_REPO: ${GITHUB_REPO:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      REGISTRY_URL: ${REGISTRY_URL:-registry.ft-soft.ru}
+      REGISTRY_USER: ${REGISTRY_USER:-}
+      REGISTRY_PASSWORD: ${REGISTRY_PASSWORD:-}
       BRANCH_PREFIX: ${BRANCH_PREFIX:-release/2}
       IMAGE_ENV_KEY: ${IMAGE_ENV_KEY:-IMAGE_TAG}
       # Swagger UI: ENABLE_SWAGGER=true в panel.env (или ASPNETCORE_ENVIRONMENT=Development)

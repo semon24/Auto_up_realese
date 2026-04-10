@@ -68,6 +68,9 @@ var portAllocationOptions = config.GetSection("PortAllocation").Get<PortAllocati
 var ghOwner = config["GITHUB_OWNER"] ?? "";
 var ghRepo = config["GITHUB_REPO"] ?? "";
 var ghToken = config["GITHUB_TOKEN"] ?? "";
+var registryUrl = config["REGISTRY_URL"] ?? "";
+var registryUser = config["REGISTRY_USER"] ?? "";
+var registryPassword = config["REGISTRY_PASSWORD"] ?? "";
 var serviceLinkEnvKeys = config.GetSection("ServiceLinkEnvKeys").Get<ServiceLinkEnvKeys>() ?? new ServiceLinkEnvKeys();
 
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
@@ -92,6 +95,10 @@ app.MapGet("/api/status", async () =>
         var running = await DockerCompose.IsRunningAsync(composeDir);
         var activeTag = EnvFile.ReadTag(envFile, imageEnvKey);
         var serviceLinks = running ? DeployEnvLinks.TryRead(envFile, serviceLinkEnvKeys) : null;
+
+        Console.WriteLine($"[status] running={running}, activeTag={activeTag ?? "<null>"}");
+        Console.WriteLine($"[status] serviceLinks={System.Text.Json.JsonSerializer.Serialize(serviceLinks)}");
+
         return Results.Json(new { running, activeTag, serviceLinks });
     }
     catch (Exception e)
@@ -132,14 +139,16 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
         return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
     try
     {
-        if (body?.AllocatePorts == true)
+        await DockerCompose.LoginAsync(registryUrl, registryUser, registryPassword);
+
+        if (body?.AllocatePorts != false)
         {
             var keys = portAllocationOptions.Keys
                 .Select(k => k.Trim())
                 .Where(k => k.Length > 0)
                 .ToList();
             if (keys.Count == 0)
-                return Results.Json(new { error = "allocatePorts: true, но PortAllocation.Keys пуст" }, statusCode: 400);
+                return Results.Json(new { error = "allocatePorts включен, но PortAllocation.Keys пуст" }, statusCode: 400);
             await PortAllocator.AllocateAndWriteEnvAsync(
                 envFile,
                 keys,

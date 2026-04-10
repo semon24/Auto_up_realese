@@ -15,6 +15,7 @@ public static class PortAllocator
 
         var chosen = new Dictionary<string, int>(StringComparer.Ordinal);
         var usedPorts = new HashSet<int>();
+        var dockerUsedHostPorts = await DockerCompose.GetPublishedTcpHostPortsAsync();
 
         foreach (var rawKey in keys)
         {
@@ -22,7 +23,7 @@ public static class PortAllocator
             var key = rawKey?.Trim();
             if (string.IsNullOrEmpty(key)) continue;
 
-            var port = FindFirstAvailable(scanMin, scanMax, usedPorts);
+            var port = FindFirstAvailable(scanMin, scanMax, usedPorts, dockerUsedHostPorts);
             if (port == null)
                 throw new InvalidOperationException(
                     $"Нет свободного TCP-порта для {key} в диапазоне {scanMin}-{scanMax}");
@@ -36,11 +37,12 @@ public static class PortAllocator
         return chosen;
     }
 
-    static int? FindFirstAvailable(int min, int max, HashSet<int> used)
+    static int? FindFirstAvailable(int min, int max, HashSet<int> used, HashSet<int> dockerUsedHostPorts)
     {
         for (var p = min; p <= max; p++)
         {
             if (used.Contains(p)) continue;
+            if (dockerUsedHostPorts.Contains(p)) continue;
             if (HostPortProbe.IsTcpPortAvailable(p))
                 return p;
         }

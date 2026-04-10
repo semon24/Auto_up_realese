@@ -1,10 +1,25 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace AutoUpRelease.Api;
 
 public static class DockerCompose
 {
     const string DockerCli = "docker";
+
+    public static async Task LoginAsync(string registry, string username, string password)
+    {
+        if (string.IsNullOrWhiteSpace(registry) ||
+            string.IsNullOrWhiteSpace(username) ||
+            string.IsNullOrWhiteSpace(password))
+            return;
+
+        await RunProcessAsync(
+            workingDir: Directory.GetCurrentDirectory(),
+            fileName: DockerCli,
+            args: ["login", registry.Trim(), "-u", username.Trim(), "--password-stdin"],
+            stdin: password + Environment.NewLine);
+    }
 
     public static async Task RunAsync(string composeDir, params string[] args)
     {
@@ -29,7 +44,36 @@ public static class DockerCompose
         }
     }
 
-    static async Task RunProcessAsync(string workingDir, string fileName, string[] args)
+    public static async Task<HashSet<int>> GetPublishedTcpHostPortsAsync()
+    {
+        try
+        {
+            var (stdout, _, exit) = await RunProcessCaptureAsync(
+                Directory.GetCurrentDirectory(),
+                DockerCli,
+                "ps", "--format", "{{.Ports}}");
+
+            if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
+                return new HashSet<int>();
+
+            var ports = new HashSet<int>();
+            var re = new Regex(@"(?<hostPort>\d+)->\d+/tcp", RegexOptions.Compiled);
+
+            foreach (Match m in re.Matches(stdout))
+            {
+                if (int.TryParse(m.Groups["hostPort"].Value, out var p) && p is >= 1 and <= 65535)
+                    ports.Add(p);
+            }
+
+            return ports;
+        }
+        catch
+        {
+            return new HashSet<int>();
+        }
+    }
+
+    static async Task RunProcessAsync(string workingDir, string fileName, string[] args, string? stdin = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -37,6 +81,7 @@ public static class DockerCompose
             WorkingDirectory = workingDir,
             UseShellExecute = false,
             RedirectStandardError = true,
+            RedirectStandardInput = stdin != null,
             CreateNoWindow = true,
         };
         foreach (var a in args)
@@ -45,6 +90,13 @@ public static class DockerCompose
         using var p = Process.Start(psi);
         if (p == null)
             throw new InvalidOperationException($"Не удалось запустить {fileName}");
+
+        if (stdin != null)
+        {
+            await p.StandardInput.WriteAsync(stdin);
+            p.StandardInput.Close();
+        }
+
         var err = await p.StandardError.ReadToEndAsync();
         await p.WaitForExitAsync();
         if (p.ExitCode != 0)
