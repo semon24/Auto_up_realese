@@ -54,7 +54,6 @@ public static class EnvFile
         await File.WriteAllTextAsync(path, next);
     }
 
-    /// <summary>Обновляет несколько KEY=value за один проход по файлу.</summary>
     public static async Task WriteTagsAsync(string path, IReadOnlyDictionary<string, string> tags)
     {
         if (tags.Count == 0) return;

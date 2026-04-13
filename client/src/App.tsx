@@ -78,7 +78,6 @@ export default function App() {
     );
   }, [items, query]);
 
-  /** Тег выбран, если строка точно совпадает с тегом из списка (в т.ч. вбит вручную). */
   const effectiveTag = useMemo(() => {
     const q = query.trim();
     const hit = items.find((i) => i.tag === q);
@@ -214,7 +213,7 @@ export default function App() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Админка
+                  Admin
                 </a>
               </li>
             )}
@@ -225,7 +224,7 @@ export default function App() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Сервис
+                  Server
                 </a>
               </li>
             )}
@@ -236,7 +235,7 @@ export default function App() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Колл
+                  Call
                 </a>
               </li>
             )}
@@ -247,7 +246,7 @@ export default function App() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Портал
+                  Portal
                 </a>
               </li>
             )}

@@ -6,6 +6,10 @@ namespace AutoUpRelease.Api;
 public static class DockerCompose
 {
     const string DockerCli = "docker";
+    static readonly HashSet<string> NonBlockingServices = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "migrator"
+    };
 
     public static async Task LoginAsync(string registry, string username, string password)
     {
@@ -32,11 +36,35 @@ public static class DockerCompose
     {
         try
         {
-            var (stdout, _, exit) = await RunProcessCaptureAsync(
+            var (allServicesOut, _, allExit) = await RunProcessCaptureAsync(
                 composeDir,
                 DockerCli,
-                "compose", "ps", "-q", "--status", "running");
-            return exit == 0 && !string.IsNullOrWhiteSpace(stdout);
+                "compose", "config", "--services");
+
+            if (allExit != 0)
+                return false;
+
+            var allServices = allServicesOut
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(s => !NonBlockingServices.Contains(s))
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (allServices.Count == 0)
+                return false;
+
+            var (runningOut, _, runningExit) = await RunProcessCaptureAsync(
+                composeDir,
+                DockerCli,
+                "compose", "ps", "--status", "running", "--services");
+
+            if (runningExit != 0)
+                return false;
+
+            var runningServices = runningOut
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.Ordinal);
+
+            return allServices.All(runningServices.Contains);
         }
         catch
         {
