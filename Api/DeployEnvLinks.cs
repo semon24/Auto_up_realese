@@ -6,8 +6,6 @@ public static class DeployEnvLinks
 {
     static readonly Regex Placeholder = new(@"\$\{([^}]+)\}", RegexOptions.Compiled);
 
-    /// <param name="deployEnvPath">Путь к deploy/.env</param>
-    /// <param name="keys">Имена переменных внутри deploy/.env для каждого сервиса (задаются в appsettings или Api/.env через ServiceLinkEnvKeys__*)</param>
     public static DeployServiceLinks? TryRead(string deployEnvPath, ServiceLinkEnvKeys keys)
     {
         if (!File.Exists(deployEnvPath)) return null;

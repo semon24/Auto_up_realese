@@ -9,7 +9,9 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       COMPOSE_DIR: ${COMPOSE_DIR:-/opt/vneocheredi}
+      COPY_FOLDER_FOR_DEPLOY_PATH: ${COPY_FOLDER_FOR_DEPLOY_PATH:-}
       ENV_FILE: ${ENV_FILE:-/opt/vneocheredi/.env}
+      STATE_FILE: ${STATE_FILE:-/opt/vneocheredi}
       HARBOR_REPOSITORY: ${HARBOR_REPOSITORY:-vneocheredi/admin}
       REGISTRY_URL: ${REGISTRY_URL:-registry.ft-soft.ru}
       REGISTRY_USER: ${REGISTRY_USER:-}
