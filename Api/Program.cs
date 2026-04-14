@@ -22,7 +22,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "Auto up release API",
         Version = "v1",
-        Description = "Ветки GitHub, статус compose, старт/стоп приложения",
+        Description = "Теги Harbor, статус compose, старт/стоп приложения",
     });
 });
 
@@ -63,11 +63,8 @@ envFile = Path.GetFullPath(envFile);
 if (!string.Equals(Path.GetFileName(envFile), ".env", StringComparison.OrdinalIgnoreCase))
     throw new InvalidOperationException("ENV_FILE должен указывать на файл .env целевого приложения.");
 var imageEnvKey = config["IMAGE_ENV_KEY"] ?? "IMAGE_TAG";
-var branchPrefix = config["BRANCH_PREFIX"] ?? "release/2";
 var portAllocationOptions = config.GetSection("PortAllocation").Get<PortAllocationOptions>() ?? new PortAllocationOptions();
-var ghOwner = config["GITHUB_OWNER"] ?? "";
-var ghRepo = config["GITHUB_REPO"] ?? "";
-var ghToken = config["GITHUB_TOKEN"] ?? "";
+var harborRepository = config["HARBOR_REPOSITORY"] ?? "vneocheredi/admin";
 var registryUrl = config["REGISTRY_URL"] ?? "";
 var registryUser = config["REGISTRY_USER"] ?? "";
 var registryPassword = config["REGISTRY_PASSWORD"] ?? "";
@@ -75,11 +72,17 @@ var serviceLinkEnvKeys = config.GetSection("ServiceLinkEnvKeys").Get<ServiceLink
 
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
 
-app.MapGet("/api/branches", async (IHttpClientFactory httpFactory) =>
+app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
 {
     try
     {
-        var items = await GitHubBranches.FetchAllAsync(httpFactory, ghOwner, ghRepo, ghToken, branchPrefix);
+        var items = await HarborTags.FetchAllAsync(
+            httpFactory,
+            registryUrl,
+            registryUser,
+            registryPassword,
+            harborRepository);
+
         return Results.Json(new { items });
     }
     catch (Exception e)

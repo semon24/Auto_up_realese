@@ -6,9 +6,7 @@ public record StartBody(
     [property: JsonPropertyName("tag")] string? Tag,
     [property: JsonPropertyName("allocatePorts")] bool? AllocatePorts);
 
-public record BranchItem(string Branch, string Tag);
-
-public record GitHubBranch(string Name);
+public record TagItem(string Tag);
 
 public class ServiceLinkEnvKeys
 {

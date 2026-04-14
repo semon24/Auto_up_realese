@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api, errMessage } from "./apiClient";
-import { BRANCH_POLL_MS, STATUS_POLL_MS } from "./constants";
+import { STATUS_POLL_MS, TAGS_POLL_MS } from "./constants";
 import { dispatchApp, useAppStore } from "./store/appStore";
-import type { BranchesResponse, StatusResponse } from "./types";
+import type { StatusResponse, TagsResponse } from "./types";
 import "./App.css";
 
 export default function App() {
   const {
     items,
-    branchError,
-    branchesLoading,
+    tagsError,
+    tagsLoading,
     status,
     query,
     open,
@@ -18,13 +18,13 @@ export default function App() {
   } = useAppStore();
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const loadBranches = useCallback(async () => {
-    dispatchApp({ type: "BRANCHES_REQUEST" });
+  const loadTags = useCallback(async () => {
+    dispatchApp({ type: "TAGS_REQUEST" });
     try {
-      const data = await api<BranchesResponse>("/api/branches");
-      dispatchApp({ type: "BRANCHES_SUCCESS", items: data.items ?? [] });
+      const data = await api<TagsResponse>("/api/tags");
+      dispatchApp({ type: "TAGS_SUCCESS", items: data.items ?? [] });
     } catch (e) {
-      dispatchApp({ type: "BRANCHES_FAILURE", error: errMessage(e) });
+      dispatchApp({ type: "TAGS_FAILURE", error: errMessage(e) });
     }
   }, []);
 
@@ -43,10 +43,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void loadBranches();
-    const id = setInterval(() => void loadBranches(), BRANCH_POLL_MS);
+    void loadTags();
+    const id = setInterval(() => void loadTags(), TAGS_POLL_MS);
     return () => clearInterval(id);
-  }, [loadBranches]);
+  }, [loadTags]);
 
   useEffect(() => {
     void loadStatus();
@@ -72,10 +72,7 @@ export default function App() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return items;
-    return items.filter(
-      (x) =>
-        x.tag.toLowerCase().includes(q) || x.branch.toLowerCase().includes(q)
-    );
+    return items.filter((x) => x.tag.toLowerCase().includes(q));
   }, [items, query]);
 
   const effectiveTag = useMemo(() => {
@@ -142,7 +139,7 @@ export default function App() {
         <input
           className="search"
           type="search"
-          placeholder="Поиск по тегу или ветке…"
+          placeholder="Поиск по тегу…"
           value={query}
           onChange={(e) => {
             dispatchApp({ type: "QUERY_CHANGE", query: e.target.value });
@@ -151,20 +148,19 @@ export default function App() {
           onFocus={() => dispatchApp({ type: "OPEN_SET", open: true })}
           autoComplete="off"
           aria-expanded={open}
-          aria-controls="branch-listbox"
+          aria-controls="tag-listbox"
         />
         {open && filtered.length > 0 && (
-          <ul id="branch-listbox" className="list" role="listbox">
+          <ul id="tag-listbox" className="list" role="listbox">
             {filtered.map((x) => (
               <li
-                key={x.branch}
+                key={x.tag}
                 role="option"
                 aria-selected={effectiveTag === x.tag}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => pickItem(x.tag)}
               >
                 {x.tag}
-                <small>{x.branch}</small>
               </li>
             ))}
           </ul>
@@ -174,21 +170,21 @@ export default function App() {
       <button
         type="button"
         className="btn btn--refresh"
-        disabled={branchesLoading}
-        onClick={() => void loadBranches()}
+        disabled={tagsLoading}
+        onClick={() => void loadTags()}
       >
-        {branchesLoading ? "…" : "Обновить список веток"}
+        {tagsLoading ? "…" : "Обновить список тегов"}
       </button>
 
-      {branchError && <p className="error">{branchError}</p>}
-      {!branchError && items.length === 0 && (
-        <p className="hint">Веток с префиксом release/2… пока нет или список пуст.</p>
+      {tagsError && <p className="error">{tagsError}</p>}
+      {!tagsError && items.length === 0 && (
+        <p className="hint">Теги в Harbor пока не найдены или список пуст.</p>
       )}
 
       <button
         type="button"
         className={btnClass}
-        disabled={loading || (!status.running && !effectiveTag) || !!branchError}
+        disabled={loading || (!status.running && !effectiveTag) || !!tagsError}
         onClick={() => void onPrimaryClick()}
       >
         {loading ? "…" : primaryLabel}

@@ -1,10 +1,9 @@
-export interface BranchItem {
-  branch: string;
+export interface TagItem {
   tag: string;
 }
 
-export interface BranchesResponse {
-  items?: BranchItem[];
+export interface TagsResponse {
+  items?: TagItem[];
 }
 
 export interface ServiceLinks {

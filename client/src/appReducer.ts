@@ -1,9 +1,9 @@
-import type { BranchItem, ServiceLinks } from "./types";
+import type { ServiceLinks, TagItem } from "./types";
 
 export interface AppState {
-  items: BranchItem[];
-  branchError: string | null;
-  branchesLoading: boolean;
+  items: TagItem[];
+  tagsError: string | null;
+  tagsLoading: boolean;
   status: {
     running: boolean;
     activeTag: string | null;
@@ -17,8 +17,8 @@ export interface AppState {
 
 export const initialAppState: AppState = {
   items: [],
-  branchError: null,
-  branchesLoading: false,
+  tagsError: null,
+  tagsLoading: false,
   status: { running: false, activeTag: null, serviceLinks: null },
   query: "",
   open: false,
@@ -27,9 +27,9 @@ export const initialAppState: AppState = {
 };
 
 export type AppAction =
-  | { type: "BRANCHES_REQUEST" }
-  | { type: "BRANCHES_SUCCESS"; items: BranchItem[] }
-  | { type: "BRANCHES_FAILURE"; error: string }
+  | { type: "TAGS_REQUEST" }
+  | { type: "TAGS_SUCCESS"; items: TagItem[] }
+  | { type: "TAGS_FAILURE"; error: string }
   | {
       type: "STATUS_SUCCESS";
       running: boolean;
@@ -44,17 +44,17 @@ export type AppAction =
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case "BRANCHES_REQUEST":
-      return { ...state, branchError: null, branchesLoading: true };
-    case "BRANCHES_SUCCESS":
+    case "TAGS_REQUEST":
+      return { ...state, tagsError: null, tagsLoading: true };
+    case "TAGS_SUCCESS":
       return {
         ...state,
         items: action.items,
-        branchError: null,
-        branchesLoading: false,
+        tagsError: null,
+        tagsLoading: false,
       };
-    case "BRANCHES_FAILURE":
-      return { ...state, branchError: action.error, branchesLoading: false };
+    case "TAGS_FAILURE":
+      return { ...state, tagsError: action.error, tagsLoading: false };
     case "STATUS_SUCCESS":
       return {
         ...state,
