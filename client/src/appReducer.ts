@@ -1,4 +1,4 @@
-import type { ServiceLinks, TagItem } from "./types";
+import type { StackRuntimeItem, TagItem } from "./types";
 
 export interface AppState {
   items: TagItem[];
@@ -6,9 +6,9 @@ export interface AppState {
   tagsLoading: boolean;
   status: {
     running: boolean;
-    activeTag: string | null;
-    serviceLinks: ServiceLinks | null;
+    stacks: StackRuntimeItem[];
   };
+  selectedTagView: string | null;
   query: string;
   open: boolean;
   actionError: string | null;
@@ -19,7 +19,8 @@ export const initialAppState: AppState = {
   items: [],
   tagsError: null,
   tagsLoading: false,
-  status: { running: false, activeTag: null, serviceLinks: null },
+  status: { running: false, stacks: [] },
+  selectedTagView: null,
   query: "",
   open: false,
   actionError: null,
@@ -33,14 +34,14 @@ export type AppAction =
   | {
       type: "STATUS_SUCCESS";
       running: boolean;
-      activeTag: string | null;
-      serviceLinks?: ServiceLinks | null;
+      stacks?: StackRuntimeItem[];
     }
   | { type: "QUERY_CHANGE"; query: string }
   | { type: "OPEN_SET"; open: boolean }
   | { type: "ACTION_ERROR_SET"; error: string | null }
   | { type: "LOADING_SET"; loading: boolean }
-  | { type: "PICK_TAG"; tag: string };
+  | { type: "PICK_TAG"; tag: string }
+  | { type: "SELECT_TAG_VIEW"; tag: string | null };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -60,8 +61,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         status: {
           running: action.running,
-          activeTag: action.activeTag,
-          serviceLinks: action.serviceLinks ?? null,
+          stacks: action.stacks ?? [],
         },
       };
     case "QUERY_CHANGE":
@@ -74,6 +74,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, loading: action.loading };
     case "PICK_TAG":
       return { ...state, query: action.tag, open: false };
+    case "SELECT_TAG_VIEW":
+      return { ...state, selectedTagView: action.tag, open: false };
     default:
       return state;
   }

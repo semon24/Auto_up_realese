@@ -130,7 +130,8 @@ app.MapGet("/api/status", async () =>
         {
             var stackName = Path.GetFileName(stackDir);
             var stackStateFile = Path.Combine(stackDir, stateFileName);
-            if (await StackStateStore.IsDeletingAsync(stackStateFile, stackName))
+            var operationStatus = await StackStateStore.GetOperationStatusAsync(stackStateFile, stackName);
+            if (string.Equals(operationStatus, "deleting", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             stackDirs.Add(stackDir);
@@ -147,7 +148,6 @@ app.MapGet("/api/status", async () =>
         }
 
         var running = false;
-        string? activeTag = null;
         foreach (var stackDir in stackDirs)
         {
             var stackName = Path.GetFileName(stackDir);
@@ -156,21 +156,38 @@ app.MapGet("/api/status", async () =>
                 continue;
 
             running = true;
-            activeTag = stackName;
             break;
         }
 
-        var activeEnvFile = !string.IsNullOrWhiteSpace(activeTag)
-            ? StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, activeTag)
-            : null;
-        var serviceLinks = running && !string.IsNullOrWhiteSpace(activeEnvFile)
-            ? DeployEnvLinks.TryRead(activeEnvFile, serviceLinkEnvKeys)
-            : null;
+        Console.WriteLine($"[status] running={running}");
 
-        Console.WriteLine($"[status] running={running}, activeTag={activeTag ?? "<null>"}");
-        Console.WriteLine($"[status] serviceLinks={System.Text.Json.JsonSerializer.Serialize(serviceLinks)}");
+        var stacks = new List<object>(stackDirs.Count);
+        foreach (var stackDir in stackDirs)
+        {
+            var stackName = Path.GetFileName(stackDir);
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, stackName);
+            var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
+            var info = await StackStateStore.GetStackRuntimeInfoAsync(stackStateFile, stackName);
+            var stackServiceLinks = File.Exists(stackEnvFile)
+                ? DeployEnvLinks.TryRead(stackEnvFile, serviceLinkEnvKeys)
+                : null;
+            stacks.Add(new
+            {
+                tag = stackName,
+                running = info.Running,
+                operationType = info.OperationType,
+                operationStatus = info.OperationStatus,
+                operationError = info.OperationError,
+                serviceLinks = stackServiceLinks,
+                services = servicesState.ToDictionary(
+                    kv => kv.Key,
+                    kv => new { state = kv.Value.State, health = kv.Value.Health },
+                    StringComparer.Ordinal)
+            });
+        }
 
-        return Results.Json(new { running, activeTag, serviceLinks });
+        return Results.Json(new { running, stacks });
     }
     catch (Exception e)
     {
@@ -208,11 +225,16 @@ app.MapPost("/api/allocate-ports", async (CancellationToken ct) =>
 
         var activeEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, activeTag);
         var allocated = await PortAllocator.AllocateAndWriteEnvAsync(
+            deployProjectsDir,
+            stateFileName,
+            activeTag,
             activeEnvFile,
             keys,
             portAllocationOptions.ScanMin,
             portAllocationOptions.ScanMax,
             ct);
+        var activeStateFile = StackWorkspaceManager.GetStackStateFile(deployProjectsDir, activeTag, stateFileName);
+        await StackStateStore.SetAllocatedPortsAsync(activeStateFile, activeTag, allocated);
         var payload = allocated.ToDictionary(kv => kv.Key, kv => kv.Value);
         return Results.Json(new { ok = true, allocated = payload });
     }
@@ -234,6 +256,13 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
 
     try
     {
+        if (Directory.Exists(stackDir))
+        {
+            var existingInfo = await StackStateStore.GetStackRuntimeInfoAsync(stackStateFile, tag);
+            if (existingInfo.Running || string.Equals(existingInfo.OperationStatus, "in_progress", StringComparison.OrdinalIgnoreCase))
+                return Results.Json(new { error = $"Сервис с тегом '{tag}' уже запущен или запускается" }, statusCode: 409);
+        }
+
         await DockerCompose.LoginAsync(registryUrl, registryUser, registryPassword);
 
         StackWorkspaceManager.EnsureStackWorkspace(folderForCopyDir, stackDir);
@@ -242,6 +271,7 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
         await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "in_progress");
         await DockerCompose.EnsureVersionedResourcesAsync(
             tag,
+            stackDir,
             stackEnvFile,
             imageEnvKey,
             postgresPasswordEnvKey);
@@ -254,12 +284,16 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
                 .ToList();
             if (keys.Count == 0)
                 return Results.Json(new { error = "allocatePorts включен, но PortAllocation.Keys пуст" }, statusCode: 400);
-            await PortAllocator.AllocateAndWriteEnvAsync(
+            var allocatedPorts = await PortAllocator.AllocateAndWriteEnvAsync(
+                deployProjectsDir,
+                stateFileName,
+                tag,
                 stackEnvFile,
                 keys,
                 portAllocationOptions.ScanMin,
                 portAllocationOptions.ScanMax,
                 ct);
+            await StackStateStore.SetAllocatedPortsAsync(stackStateFile, tag, allocatedPorts);
         }
 
         await EnvFile.WriteTagAsync(stackEnvFile, imageEnvKey, tag);
@@ -295,13 +329,21 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
     }
 });
 
-app.MapPost("/api/stop", async () =>
+app.MapPost("/api/stop", async (StopBody? body) =>
 {
     try
     {
+        var requestedTag = body?.Tag?.Trim();
         var stackDirs = Directory.GetDirectories(deployProjectsDir)
             .Where(d => File.Exists(Path.Combine(d, stateFileName)))
             .ToList();
+
+        if (!string.IsNullOrWhiteSpace(requestedTag))
+        {
+            stackDirs = stackDirs
+                .Where(d => string.Equals(Path.GetFileName(d), requestedTag, StringComparison.Ordinal))
+                .ToList();
+        }
 
         foreach (var stackDir in stackDirs)
         {

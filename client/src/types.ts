@@ -15,6 +15,20 @@ export interface ServiceLinks {
 
 export interface StatusResponse {
   running?: boolean;
-  activeTag?: string | null;
+  stacks?: StackRuntimeItem[];
+}
+
+export interface RuntimeServiceState {
+  state: string;
+  health?: string | null;
+}
+
+export interface StackRuntimeItem {
+  tag: string;
+  running: boolean;
+  operationType?: string | null;
+  operationStatus?: string | null;
+  operationError?: string | null;
   serviceLinks?: ServiceLinks | null;
+  services?: Record<string, RuntimeServiceState>;
 }

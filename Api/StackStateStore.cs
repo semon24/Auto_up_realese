@@ -33,7 +33,8 @@ public static class StackStateStore
                     kv => kv.Key,
                     kv => new DockerServiceState(kv.Value.State, kv.Value.Health),
                     StringComparer.Ordinal),
-                Operation = existingEntry?.Operation
+                Operation = existingEntry?.Operation,
+                Ports = existingEntry?.Ports ?? new Dictionary<string, int>(StringComparer.Ordinal)
             };
 
             await WriteModelAsync(stateFilePath, model);
@@ -80,6 +81,51 @@ public static class StackStateStore
         }
     }
 
+    public static async Task SetAllocatedPortsAsync(
+        string stateFilePath,
+        string stackName,
+        IReadOnlyDictionary<string, int> ports)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            entry.Ports = ports.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task<Dictionary<string, int>> GetAllocatedPortsAsync(string stateFilePath, string stackName)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry) || entry.Ports.Count == 0)
+                return new Dictionary<string, int>(StringComparer.Ordinal);
+
+            return entry.Ports.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
     public static async Task<bool> HasAnyRunningServicesAsync(string stateFilePath)
     {
         var model = await ReadModelAsync(stateFilePath);
@@ -106,6 +152,45 @@ public static class StackStateStore
                 return false;
 
             return string.Equals(entry.Operation?.Status, "deleting", StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task<string?> GetOperationStatusAsync(string stateFilePath, string stackName)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                return null;
+
+            return entry.Operation?.Status;
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task<(bool Running, string? OperationType, string? OperationStatus, string? OperationError)> GetStackRuntimeInfoAsync(
+        string stateFilePath,
+        string stackName)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                return (false, null, null, null);
+
+            var running = entry.Services.Values.Any(s => string.Equals(s.State, "running", StringComparison.OrdinalIgnoreCase));
+            return (running, entry.Operation?.Type, entry.Operation?.Status, entry.Operation?.Error);
         }
         finally
         {
@@ -164,6 +249,7 @@ public static class StackStateStore
     {
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
         public StackOperation? Operation { get; set; }
+        public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);
     }
 
     sealed class StackOperation

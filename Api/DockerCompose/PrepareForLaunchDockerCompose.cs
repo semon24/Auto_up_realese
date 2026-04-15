@@ -4,6 +4,7 @@ public static partial class DockerCompose
 {
     public static async Task EnsureVersionedResourcesAsync(
         string tag,
+        string stackDir,
         string envFilePath,
         string imageEnvKey,
         string postgresPasswordEnvKey)
@@ -30,6 +31,9 @@ public static partial class DockerCompose
 
         await EnsureVolumeExistsAsync($"rabbit_data_auto_release_{tag}");
         await EnsureNetworkExistsAsync($"web_auto_release_{tag}");
+
+        if (!string.IsNullOrWhiteSpace(stackDir))
+            updates["CONTAINER_DATA_PATH"] = stackDir;
 
         if (updates.Count > 0)
             await EnvFile.WriteTagsAsync(envFilePath, updates);
@@ -98,7 +102,7 @@ public static partial class DockerCompose
 
     static string GeneratePassword(int length = 24)
     {
-        const string alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+";
+        const string alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
         var bytes = new byte[length];
         System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
         var chars = new char[length];

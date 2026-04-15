@@ -3,7 +3,7 @@ services:
     image: rabbitmq:3-management
     hostname: rabbitmq
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     volumes:
       - rabbit_data_auto_release:/var/lib/rabbitmq/mnesia/
@@ -22,7 +22,7 @@ services:
     image: postgres:17.0
     hostname: postgres
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     volumes:
       - postgres_data_auto_release:/var/lib/postgresql/data
@@ -41,7 +41,7 @@ services:
     hostname: master-postgres
     shm_size: '8gb'
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     volumes:
       - master_postgres_data_auto_release:/var/lib/postgresql/data
@@ -58,7 +58,7 @@ services:
   migrator:
     image: ${VNEOCHEREDI_REGISTRY}/migrator:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
       - ConnectionStrings__Backoffice=Host=master-postgres;Database=JeFileBackoffice;Username=postgres;Password=${MASTER_POSTGRES_PASSWORD};Include Error Detail=true;Command Timeout=1200;
@@ -71,7 +71,7 @@ services:
   bouncer:
     image: registry.ft-soft.ru/infrastructure/pgbouncer:v1.24.0-p1
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - AUTH_TYPE=plain
@@ -96,7 +96,7 @@ services:
   filestorage:
     image: ${VNEOCHEREDI_REGISTRY}/filestorage:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
@@ -113,7 +113,7 @@ services:
   speech:
     image: ${VNEOCHEREDI_REGISTRY}/speech:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
@@ -131,7 +131,7 @@ services:
   server:
     image: ${VNEOCHEREDI_REGISTRY}/server:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
@@ -177,7 +177,7 @@ services:
   admin:
     image: ${VNEOCHEREDI_REGISTRY}/admin:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
@@ -214,7 +214,7 @@ services:
   call:
     image: ${VNEOCHEREDI_REGISTRY}/call:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
@@ -235,7 +235,7 @@ services:
   portal:
     image: ${VNEOCHEREDI_REGISTRY}/rdv:${VNEOCHEREDI_VERSION}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
@@ -256,7 +256,7 @@ services:
       - OTEL_RESOURCE_ATTRIBUTES=host.name=${HOST_NAME},deployment.environment=${HOST_NAME}
       - POSTGRES_PASSWORD=${MASTER_POSTGRES_PASSWORD}
     networks:
-      - web
+      - web_auto_release
     restart: unless-stopped
     command: --config /etc/otelcol-contrib/config.yaml
 

@@ -6,6 +6,9 @@ public record StartBody(
     [property: JsonPropertyName("tag")] string? Tag,
     [property: JsonPropertyName("allocatePorts")] bool? AllocatePorts);
 
+public record StopBody(
+    [property: JsonPropertyName("tag")] string? Tag);
+
 public record TagItem(string Tag);
 
 public class ServiceLinkEnvKeys
