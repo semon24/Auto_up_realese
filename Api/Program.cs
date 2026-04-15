@@ -1,4 +1,5 @@
 using AutoUpRelease.Api;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 
 EnvLoader.LoadOptionalEnvFiles();
@@ -14,6 +15,49 @@ builder.Services.AddCors(o =>
     o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 builder.Services.AddHttpClient();
+builder.Services
+    .AddOptions<AppOptions>()
+    .Bind(builder.Configuration)
+    .Validate(o => !string.IsNullOrWhiteSpace(o.DeployProjectsDir), "DEPLOY_PROJECTS_DIR is required")
+    .Validate(o => Path.IsPathRooted(o.DeployProjectsDir.Trim()), "DEPLOY_PROJECTS_DIR must be absolute")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AppOptions>>().Value;
+    var deployProjectsDir = Path.GetFullPath(options.DeployProjectsDir.Trim());
+    var folderForCopyDir = string.IsNullOrWhiteSpace(options.CopyFolderForDeployPath)
+        ? Path.Combine(Directory.GetParent(deployProjectsDir)?.FullName ?? deployProjectsDir, "copy_folder_for_deploy")
+        : options.CopyFolderForDeployPath.Trim();
+    folderForCopyDir = Path.IsPathRooted(folderForCopyDir)
+        ? Path.GetFullPath(folderForCopyDir)
+        : Path.GetFullPath(Path.Combine(deployProjectsDir, folderForCopyDir));
+
+    var stateFileNameRaw = string.IsNullOrWhiteSpace(options.StateFile)
+        ? "status-dockers.json"
+        : options.StateFile.Trim();
+    var stateFileName = Path.GetFileName(stateFileNameRaw);
+    if (string.IsNullOrWhiteSpace(stateFileName))
+        stateFileName = "status-dockers.json";
+
+    if (!Directory.Exists(folderForCopyDir))
+        throw new InvalidOperationException($"Папка шаблона не найдена: {folderForCopyDir}. Укажите COPY_FOLDER_FOR_DEPLOY_PATH.");
+
+    return new ResolvedAppOptions
+    {
+        EnableSwagger = options.EnableSwagger,
+        DeployProjectsDir = deployProjectsDir,
+        FolderForCopyDir = folderForCopyDir,
+        StateFileName = stateFileName,
+        ImageEnvKey = options.ImageEnvKey,
+        PostgresPasswordEnvKey = options.PostgresPasswordEnvKey,
+        PortAllocation = options.PortAllocation,
+        HarborRepository = options.HarborRepository,
+        RegistryUrl = options.RegistryUrl,
+        RegistryUser = options.RegistryUser,
+        RegistryPassword = options.RegistryPassword,
+        ServiceLinkEnvKeys = options.ServiceLinkEnvKeys
+    };
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -28,9 +72,9 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 app.UseCors();
+var settings = app.Services.GetRequiredService<ResolvedAppOptions>();
 
-var swaggerEnabled = app.Environment.IsDevelopment()
-    || string.Equals(app.Configuration["EnableSwagger"], "true", StringComparison.OrdinalIgnoreCase);
+var swaggerEnabled = app.Environment.IsDevelopment() || settings.EnableSwagger;
 if (swaggerEnabled)
 {
     app.UseSwagger();
@@ -41,82 +85,17 @@ if (swaggerEnabled)
     });
 }
 
-var config = app.Configuration;
-
-var composeDir = string.IsNullOrWhiteSpace(config["COMPOSE_DIR"])
-    ? "/opt/vneocheredi"
-    : config["COMPOSE_DIR"]!.Trim();
-
-if (!Path.IsPathRooted(composeDir))
-    throw new InvalidOperationException("COMPOSE_DIR должен быть абсолютным путем до папки с docker-compose.yml.");
-
-composeDir = Path.GetFullPath(composeDir);
-var templateDir = string.IsNullOrWhiteSpace(config["COPY_FOLDER_FOR_DEPLOY_PATH"])
-    ? Path.Combine(Directory.GetParent(composeDir)?.FullName ?? composeDir, "copy_folder_for_deploy")
-    : config["COPY_FOLDER_FOR_DEPLOY_PATH"]!.Trim();
-templateDir = Path.IsPathRooted(templateDir)
-    ? Path.GetFullPath(templateDir)
-    : Path.GetFullPath(Path.Combine(composeDir, templateDir));
-var statePath = string.IsNullOrWhiteSpace(config["STATE_FILE"])
-    ? composeDir
-    : config["STATE_FILE"]!.Trim();
-statePath = Path.IsPathRooted(statePath)
-    ? Path.GetFullPath(statePath)
-    : Path.GetFullPath(Path.Combine(composeDir, statePath));
-var stateFile = string.Equals(Path.GetExtension(statePath), ".json", StringComparison.OrdinalIgnoreCase)
-    ? statePath
-    : Path.Combine(statePath, "stateStack.json");
-var imageEnvKey = config["IMAGE_ENV_KEY"] ?? "IMAGE_TAG";
-var portAllocationOptions = config.GetSection("PortAllocation").Get<PortAllocationOptions>() ?? new PortAllocationOptions();
-var harborRepository = config["HARBOR_REPOSITORY"] ?? "vneocheredi/admin";
-var registryUrl = config["REGISTRY_URL"] ?? "";
-var registryUser = config["REGISTRY_USER"] ?? "";
-var registryPassword = config["REGISTRY_PASSWORD"] ?? "";
-var serviceLinkEnvKeys = config.GetSection("ServiceLinkEnvKeys").Get<ServiceLinkEnvKeys>() ?? new ServiceLinkEnvKeys();
-
-if (!Directory.Exists(templateDir))
-    throw new InvalidOperationException($"Папка шаблона не найдена: {templateDir}. Укажите COPY_FOLDER_FOR_DEPLOY_PATH.");
-
-string GetStackDir(string tag) => Path.Combine(composeDir, tag);
-string GetStackEnvFile(string tag) => Path.Combine(GetStackDir(tag), ".env");
-
-void CopyDirectoryRecursive(string sourceDir, string targetDir)
-{
-    Directory.CreateDirectory(targetDir);
-
-    foreach (var file in Directory.GetFiles(sourceDir))
-    {
-        var destFile = Path.Combine(targetDir, Path.GetFileName(file));
-        if (!File.Exists(destFile))
-            File.Copy(file, destFile);
-    }
-
-    foreach (var sourceSubDir in Directory.GetDirectories(sourceDir))
-    {
-        var destSubDir = Path.Combine(targetDir, Path.GetFileName(sourceSubDir));
-        CopyDirectoryRecursive(sourceSubDir, destSubDir);
-    }
-}
-
-void EnsureStackWorkspace(string tag)
-{
-    var stackDir = GetStackDir(tag);
-    if (!Directory.Exists(stackDir))
-    {
-        Directory.CreateDirectory(stackDir);
-        CopyDirectoryRecursive(templateDir, stackDir);
-    }
-
-    var stackEnvFile = GetStackEnvFile(tag);
-    if (!File.Exists(stackEnvFile))
-    {
-        var templateEnv = Path.Combine(templateDir, ".env");
-        if (File.Exists(templateEnv))
-            File.Copy(templateEnv, stackEnvFile);
-        else
-            File.WriteAllText(stackEnvFile, string.Empty);
-    }
-}
+var deployProjectsDir = settings.DeployProjectsDir;
+var folderForCopyDir = settings.FolderForCopyDir;
+var stateFileName = settings.StateFileName;
+var imageEnvKey = settings.ImageEnvKey;
+var postgresPasswordEnvKey = settings.PostgresPasswordEnvKey;
+var portAllocationOptions = settings.PortAllocation;
+var harborRepository = settings.HarborRepository;
+var registryUrl = settings.RegistryUrl;
+var registryUser = settings.RegistryUser;
+var registryPassword = settings.RegistryPassword;
+var serviceLinkEnvKeys = settings.ServiceLinkEnvKeys;
 
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
 
@@ -143,20 +122,47 @@ app.MapGet("/api/status", async () =>
 {
     try
     {
-        var stackNames = await StackStateStore.GetStackNamesAsync(stateFile);
-        foreach (var stackName in stackNames)
+        var rawStackDirs = Directory.GetDirectories(deployProjectsDir)
+            .Where(d => File.Exists(Path.Combine(d, stateFileName)))
+            .ToList();
+        var stackDirs = new List<string>(rawStackDirs.Count);
+        foreach (var stackDir in rawStackDirs)
         {
-            var stackDir = GetStackDir(stackName);
-            if (!Directory.Exists(stackDir))
+            var stackName = Path.GetFileName(stackDir);
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (await StackStateStore.IsDeletingAsync(stackStateFile, stackName))
                 continue;
 
-            var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
-            await StackStateStore.WriteAsync(stateFile, stackName, servicesState);
+            stackDirs.Add(stackDir);
         }
 
-        var running = await StackStateStore.HasAnyRunningServicesAsync(stateFile);
-        var activeTag = await StackStateStore.GetAnyRunningStackNameAsync(stateFile);
-        var activeEnvFile = !string.IsNullOrWhiteSpace(activeTag) ? GetStackEnvFile(activeTag) : null;
+        foreach (var stackDir in stackDirs)
+        {
+            var stackName = Path.GetFileName(stackDir);
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (!Directory.Exists(stackDir))
+                continue;
+            var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
+            await StackStateStore.SaveStackServicesStateAsync(stackStateFile, stackName, servicesState);
+        }
+
+        var running = false;
+        string? activeTag = null;
+        foreach (var stackDir in stackDirs)
+        {
+            var stackName = Path.GetFileName(stackDir);
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (!await StackStateStore.HasAnyRunningServicesAsync(stackStateFile))
+                continue;
+
+            running = true;
+            activeTag = stackName;
+            break;
+        }
+
+        var activeEnvFile = !string.IsNullOrWhiteSpace(activeTag)
+            ? StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, activeTag)
+            : null;
         var serviceLinks = running && !string.IsNullOrWhiteSpace(activeEnvFile)
             ? DeployEnvLinks.TryRead(activeEnvFile, serviceLinkEnvKeys)
             : null;
@@ -182,11 +188,25 @@ app.MapPost("/api/allocate-ports", async (CancellationToken ct) =>
         return Results.Json(new { error = "В PortAllocation.Keys нет ни одного имени переменной" }, statusCode: 400);
     try
     {
-        var activeTag = await StackStateStore.GetAnyRunningStackNameAsync(stateFile);
+        var activeTag = (string?)null;
+        var stackDirs = Directory.GetDirectories(deployProjectsDir)
+            .Where(d => File.Exists(Path.Combine(d, stateFileName)))
+            .ToList();
+        foreach (var stackDir in stackDirs)
+        {
+            var stackName = Path.GetFileName(stackDir);
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (!await StackStateStore.HasAnyRunningServicesAsync(stackStateFile))
+                continue;
+
+            activeTag = stackName;
+            break;
+        }
+
         if (string.IsNullOrWhiteSpace(activeTag))
             return Results.Json(new { error = "Нет активного стека для аллокации портов" }, statusCode: 400);
 
-        var activeEnvFile = GetStackEnvFile(activeTag);
+        var activeEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, activeTag);
         var allocated = await PortAllocator.AllocateAndWriteEnvAsync(
             activeEnvFile,
             keys,
@@ -207,14 +227,24 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
     var tag = body?.Tag?.Trim();
     if (string.IsNullOrEmpty(tag))
         return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+
+    var stackDir = StackWorkspaceManager.GetStackDir(deployProjectsDir, tag);
+    var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, tag);
+    var stackStateFile = StackWorkspaceManager.GetStackStateFile(deployProjectsDir, tag, stateFileName);
+
     try
     {
         await DockerCompose.LoginAsync(registryUrl, registryUser, registryPassword);
 
-        EnsureStackWorkspace(tag);
-        var stackDir = GetStackDir(tag);
-        var stackEnvFile = GetStackEnvFile(tag);
-        await DockerCompose.EnsureVersionedResourcesAsync(tag, stackEnvFile, imageEnvKey);
+        StackWorkspaceManager.EnsureStackWorkspace(folderForCopyDir, stackDir);
+        if (!File.Exists(stackStateFile))
+            await File.WriteAllTextAsync(stackStateFile, "{}");
+        await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "in_progress");
+        await DockerCompose.EnsureVersionedResourcesAsync(
+            tag,
+            stackEnvFile,
+            imageEnvKey,
+            postgresPasswordEnvKey);
 
         if (body?.AllocatePorts != false)
         {
@@ -234,15 +264,33 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
 
         await EnvFile.WriteTagAsync(stackEnvFile, imageEnvKey, tag);
         await DockerCompose.RunAsync(stackDir, null, "up", "-d");
-        var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
+        var waitResult = await DockerCompose.WaitForServicesReadyAsync(
+            stackDir,
+            timeout: TimeSpan.FromSeconds(600),
+            pollInterval: TimeSpan.FromSeconds(2),
+            ct);
+        if (!waitResult.IsReady)
+        {
+            var startFailedMessage = waitResult.HasFailure
+                ? $"Не удалось успешно запустить стек: {waitResult.Reason}"
+                : "Не удалось успешно запустить стек: сервисы не достигли состояния running/exited за отведенное время";
+            await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "deleting", error: startFailedMessage);
+            await DockerComposeFullCleanup.CleanupStackAsync(stackDir);
+            return Results.Json(new { error = startFailedMessage }, statusCode: 500);
+        }
+
+        var servicesState = waitResult.ServicesState;
         var startStackName = tag;
-        await StackStateStore.WriteAsync(stateFile, startStackName, servicesState);
-        var running = await StackStateStore.HasAnyRunningServicesAsync(stateFile);
-        var serviceLinks = running ? DeployEnvLinks.TryRead(stackEnvFile, serviceLinkEnvKeys) : null;
+        await StackStateStore.SaveStackServicesStateAsync(stackStateFile, startStackName, servicesState);
+        await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "success");
+        var running = true;
+        var serviceLinks = DeployEnvLinks.TryRead(stackEnvFile, serviceLinkEnvKeys);
         return Results.Json(new { ok = true, running, serviceLinks });
     }
     catch (Exception e)
     {
+        await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "deleting", error: e.Message);
+        await DockerComposeFullCleanup.CleanupStackAsync(stackDir);
         return Results.Json(new { error = e.Message }, statusCode: 500);
     }
 });
@@ -251,21 +299,34 @@ app.MapPost("/api/stop", async () =>
 {
     try
     {
-        var stackNames = await StackStateStore.GetStackNamesAsync(stateFile);
-        foreach (var stackName in stackNames)
-        {
-            var stackDir = GetStackDir(stackName);
-            if (!Directory.Exists(stackDir))
-            {
-                await StackStateStore.DeleteStackAsync(stateFile, stackName);
-                continue;
-            }
+        var stackDirs = Directory.GetDirectories(deployProjectsDir)
+            .Where(d => File.Exists(Path.Combine(d, stateFileName)))
+            .ToList();
 
-            await DockerCompose.RunAsync(stackDir, null, "down");
-            await StackStateStore.DeleteStackAsync(stateFile, stackName);
+        foreach (var stackDir in stackDirs)
+        {
+            var stackName = Path.GetFileName(stackDir);
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (!Directory.Exists(stackDir))
+                continue;
+
+            await StackStateStore.SetOperationAsync(stackStateFile, stackName, operationType: "stop", operationStatus: "deleting");
+            await DockerComposeFullCleanup.CleanupStackAsync(stackDir);
+            if (File.Exists(stackStateFile))
+                await StackStateStore.SetOperationAsync(stackStateFile, stackName, operationType: "stop", operationStatus: "success");
         }
 
-        var running = await StackStateStore.HasAnyRunningServicesAsync(stateFile);
+        var running = false;
+        foreach (var stackDir in stackDirs)
+        {
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (!await StackStateStore.HasAnyRunningServicesAsync(stackStateFile))
+                continue;
+
+            running = true;
+            break;
+        }
+
         return Results.Json(new { ok = true, running });
     }
     catch (Exception e)

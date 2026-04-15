@@ -9,3 +9,4 @@ client/dist/
 # Secrets & local env
 .env
 *.env
+ContainersData/

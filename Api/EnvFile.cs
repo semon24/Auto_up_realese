@@ -25,34 +25,11 @@ public static class EnvFile
         }
     }
 
-    public static async Task WriteTagAsync(string path, string key, string tag)
-    {
-        var dir = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
-
-        string raw;
-        try
+    public static Task WriteTagAsync(string path, string key, string tag) =>
+        WriteTagsAsync(path, new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            raw = await File.ReadAllTextAsync(path);
-        }
-        catch
-        {
-            raw = "";
-        }
-
-        var line = $"{key}={tag}";
-        var re = new Regex(@"^\s*" + Regex.Escape(key) + @"\s*=.*$", RegexOptions.Multiline);
-        string next;
-        if (re.IsMatch(raw))
-            next = re.Replace(raw, line);
-        else if (string.IsNullOrWhiteSpace(raw))
-            next = line + Environment.NewLine;
-        else
-            next = raw.TrimEnd() + Environment.NewLine + line + Environment.NewLine;
-
-        await File.WriteAllTextAsync(path, next);
-    }
+            [key] = tag
+        });
 
     public static async Task WriteTagsAsync(string path, IReadOnlyDictionary<string, string> tags)
     {

@@ -2,26 +2,26 @@ services:
   api-auto-up-release:
     image: registry.ft-soft.ru/devops/api-auto-up-release:latest
     ports:
-      - "3001:3001"
-    # Подхватывает Harbor/registry переменные из файла .env рядом с этим compose
-    env_file:
-      - .env
+      - "3002:3001"
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      COMPOSE_DIR: ${COMPOSE_DIR:-/opt/vneocheredi}
-      COPY_FOLDER_FOR_DEPLOY_PATH: ${COPY_FOLDER_FOR_DEPLOY_PATH:-}
-      ENV_FILE: ${ENV_FILE:-/opt/vneocheredi/.env}
-      STATE_FILE: ${STATE_FILE:-/opt/vneocheredi}
-      HARBOR_REPOSITORY: ${HARBOR_REPOSITORY:-vneocheredi/admin}
-      REGISTRY_URL: ${REGISTRY_URL:-registry.ft-soft.ru}
-      REGISTRY_USER: ${REGISTRY_USER:-}
-      REGISTRY_PASSWORD: ${REGISTRY_PASSWORD:-}
-      IMAGE_ENV_KEY: ${IMAGE_ENV_KEY:-IMAGE_TAG}
-      # Swagger UI: ENABLE_SWAGGER=true в panel.env (или ASPNETCORE_ENVIRONMENT=Development)
-      EnableSwagger: ${ENABLE_SWAGGER:-false}
+      DEPLOY_PROJECTS_DIR: ${DEPLOY_PROJECTS_DIR}
+      COPY_FOLDER_FOR_DEPLOY_PATH: ${COPY_FOLDER_FOR_DEPLOY_PATH}
+      IMAGE_ENV_KEY: ${IMAGE_ENV_KEY}
+      ServiceLinkEnvKeys__Admin: ${ServiceLinkEnvKeys__Admin}
+      ServiceLinkEnvKeys__Server: ${ServiceLinkEnvKeys__Server}
+      ServiceLinkEnvKeys__Portal: ${ServiceLinkEnvKeys__Portal}
+      ServiceLinkEnvKeys__Call: ${ServiceLinkEnvKeys__Call}
+      REGISTRY_URL: ${REGISTRY_URL}
+      REGISTRY_USER: ${REGISTRY_USER}
+      REGISTRY_PASSWORD: ${REGISTRY_PASSWORD}
+      HARBOR_REPOSITORY: ${HARBOR_REPOSITORY}
+      STATE_FILE: ${STATE_FILE}
+      POSTGRES_PASSWORD_ENV_KEY: ${POSTGRES_PASSWORD_ENV_KEY}
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER}
     volumes:
-      # На сервере задайте в .env: DEPLOY_ROOT=/opt/vneocheredi_auto_release_up/deploy_vneocheredi
-      - ${DEPLOY_ROOT:-../deploy}:/host/deploy
+      # каталог с docker-compose приложения и deploy/.env (подставьте свой путь на сервере)
+      - /opt/vneocheredi_auto_release_up/deploy_vneocheredi:/opt/vneocheredi_auto_release_up/deploy_vneocheredi
+      - /opt/vneocheredi_auto_release_up/data:/opt/vneocheredi_auto_release_up/data
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - network-auto-up-release

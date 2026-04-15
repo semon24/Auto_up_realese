@@ -1,0 +1,22 @@
+{
+    "stack": {
+      "release-2026-04-15": {
+        "services": {
+          "server": {
+            "state": "running",
+            "health": "healthy"
+          },
+          "migrator": {
+            "state": "exited",
+            "health": null
+          }
+        },
+        "operation": {
+          "type": "start",
+          "status": "success",
+          "error": null,
+          "updatedAtUtc": "2026-04-15T12:34:56.789+00:00"
+        }
+      }
+    }
+}

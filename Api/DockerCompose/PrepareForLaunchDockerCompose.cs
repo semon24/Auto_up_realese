@@ -2,9 +2,14 @@ namespace AutoUpRelease.Api;
 
 public static partial class DockerCompose
 {
-    public static async Task EnsureVersionedResourcesAsync(string tag, string envFilePath, string imageEnvKey)
+    public static async Task EnsureVersionedResourcesAsync(
+        string tag,
+        string envFilePath,
+        string imageEnvKey,
+        string postgresPasswordEnvKey)
     {
         var updates = new Dictionary<string, string>(StringComparer.Ordinal);
+        var (postgresPasswordKey, masterPostgresPasswordKey) = ParsePasswordKeys(postgresPasswordEnvKey);
 
         if (!string.IsNullOrWhiteSpace(imageEnvKey) && string.IsNullOrWhiteSpace(EnvFile.ReadTag(envFilePath, imageEnvKey)))
             updates[imageEnvKey] = tag;
@@ -13,14 +18,14 @@ public static partial class DockerCompose
         if (!await VolumeExistsAsync(postgresVolume))
         {
             await EnsureVolumeExistsAsync(postgresVolume);
-            updates["POSTGRES_PASSWORD"] = GeneratePassword();
+            updates[postgresPasswordKey] = GeneratePassword();
         }
 
         var masterPostgresVolume = $"master_postgres_data_auto_release_{tag}";
         if (!await VolumeExistsAsync(masterPostgresVolume))
         {
             await EnsureVolumeExistsAsync(masterPostgresVolume);
-            updates["MASTER_POSTGRES_PASSWORD"] = GeneratePassword();
+            updates[masterPostgresPasswordKey] = GeneratePassword();
         }
 
         await EnsureVolumeExistsAsync($"rabbit_data_auto_release_{tag}");
@@ -28,6 +33,16 @@ public static partial class DockerCompose
 
         if (updates.Count > 0)
             await EnvFile.WriteTagsAsync(envFilePath, updates);
+    }
+
+    static (string PostgresPasswordKey, string MasterPostgresPasswordKey) ParsePasswordKeys(string rawKeys)
+    {
+        var parts = (rawKeys ?? string.Empty)
+            .Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        var postgresPasswordKey = parts.Length >= 1 ? parts[0] : "POSTGRES_PASSWORD";
+        var masterPostgresPasswordKey = parts.Length >= 2 ? parts[1] : "MASTER_POSTGRES_PASSWORD";
+        return (postgresPasswordKey, masterPostgresPasswordKey);
     }
 
     public static async Task<bool> VolumeExistsAsync(string volumeName)

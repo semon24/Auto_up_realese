@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Collections.Concurrent;
 
 namespace AutoUpRelease.Api;
 
@@ -9,30 +10,74 @@ public static class StackStateStore
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
+    static readonly ConcurrentDictionary<string, SemaphoreSlim> FileLocks = new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task WriteAsync(string stateFilePath, string stackName, IReadOnlyDictionary<string, DockerServiceState> services)
+    static SemaphoreSlim GetFileLock(string stateFilePath) =>
+        FileLocks.GetOrAdd(Path.GetFullPath(stateFilePath), _ => new SemaphoreSlim(1, 1));
+
+    public static async Task SaveStackServicesStateAsync(string stateFilePath, string stackName, IReadOnlyDictionary<string, DockerServiceState> services)
     {
-        var dir = Path.GetDirectoryName(stateFilePath);
-        if (!string.IsNullOrWhiteSpace(dir))
-            Directory.CreateDirectory(dir);
-
-        var model = await ReadModelAsync(stateFilePath);
-        model.Stack[stackName] = new StackEntry
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
         {
-            Services = services.ToDictionary(
-                kv => kv.Key,
-                kv => new DockerServiceState(kv.Value.State, kv.Value.Health),
-                StringComparer.Ordinal)
-        };
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
 
-        await WriteModelAsync(stateFilePath, model);
+            var model = await ReadModelAsync(stateFilePath);
+            model.Stack.TryGetValue(stackName, out var existingEntry);
+            model.Stack[stackName] = new StackEntry
+            {
+                Services = services.ToDictionary(
+                    kv => kv.Key,
+                    kv => new DockerServiceState(kv.Value.State, kv.Value.Health),
+                    StringComparer.Ordinal),
+                Operation = existingEntry?.Operation
+            };
+
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
     }
 
-    public static async Task DeleteStackAsync(string stateFilePath, string stackName)
+    public static async Task SetOperationAsync(
+        string stateFilePath,
+        string stackName,
+        string operationType,
+        string operationStatus,
+        string? error = null)
     {
-        var model = await ReadModelAsync(stateFilePath);
-        model.Stack.Remove(stackName);
-        await WriteModelAsync(stateFilePath, model);
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            entry.Operation = new StackOperation
+            {
+                Type = operationType,
+                Status = operationStatus,
+                Error = error,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
     }
 
     public static async Task<bool> HasAnyRunningServicesAsync(string stateFilePath)
@@ -48,6 +93,24 @@ public static class StackStateStore
         }
 
         return false;
+    }
+
+    public static async Task<bool> IsDeletingAsync(string stateFilePath, string stackName)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                return false;
+
+            return string.Equals(entry.Operation?.Status, "deleting", StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
     }
 
     public static async Task<List<string>> GetStackNamesAsync(string stateFilePath)
@@ -100,5 +163,14 @@ public static class StackStateStore
     sealed class StackEntry
     {
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
+        public StackOperation? Operation { get; set; }
+    }
+
+    sealed class StackOperation
+    {
+        public string Type { get; set; } = "start";
+        public string Status { get; set; } = "in_progress";
+        public string? Error { get; set; }
+        public DateTimeOffset UpdatedAtUtc { get; set; }
     }
 }
