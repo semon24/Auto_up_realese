@@ -1,0 +1,35 @@
+.stack-sidebar {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  width: 280px;
+  max-height: calc(100vh - 2.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 20;
+}
+
+.stack-main-btn {
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  background: #161b22;
+  color: #e6edf3;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stack-main-btn.is-active {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+}
+
+.stack-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 0.15rem;
+}

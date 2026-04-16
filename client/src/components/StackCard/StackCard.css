@@ -1,0 +1,54 @@
+.stack-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.stack-card {
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  background: #161b22;
+  color: #e6edf3;
+  text-align: left;
+  padding: 0.65rem 0.8rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stack-card:focus,
+.stack-card:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.stack-card.is-running {
+  border-color: #2ea043;
+  background: rgba(35, 134, 54, 0.2);
+}
+
+.stack-card.is-loading {
+  border-color: #d29922;
+  background: rgba(210, 153, 34, 0.2);
+}
+
+.stack-card.is-active {
+  border-color: #58a6ff;
+  box-shadow: none;
+}
+
+.stack-card__tag {
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stack-card__state {
+  font-size: 0.8rem;
+  color: #8b949e;
+  text-transform: uppercase;
+}

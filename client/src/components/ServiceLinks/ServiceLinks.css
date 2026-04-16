@@ -1,0 +1,31 @@
+.service-links {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #161b22;
+}
+
+.service-links__title {
+  margin: 0 0 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.service-links__list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: #58a6ff;
+}
+
+.service-links__list a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.service-links__list a:hover {
+  text-decoration: underline;
+}

@@ -1,0 +1,38 @@
+.main-errors {
+  width: min(100%, 760px);
+  border: 1px solid rgba(248, 81, 73, 0.45);
+  border-radius: 12px;
+  background: rgba(248, 81, 73, 0.08);
+  padding: 0.8rem 1rem;
+}
+
+.main-errors__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.main-errors__divider {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid rgba(248, 81, 73, 0.35);
+  margin: 0.25rem 0 0.55rem;
+}
+
+.main-errors__title {
+  margin: 0;
+  color: #ffb4aa;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.main-errors__text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #ffd9d4;
+  max-height: 7.2em;
+  overflow: auto;
+}

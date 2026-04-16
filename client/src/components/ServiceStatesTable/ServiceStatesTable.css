@@ -1,0 +1,40 @@
+.service-states {
+  margin-top: 0.5rem;
+  padding: 0.95rem 1.1rem;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #161b22;
+  width: min(100%, 520px);
+}
+
+.service-states__title {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.service-states__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.service-states__table th,
+.service-states__table td {
+  text-align: left;
+  padding: 0.4rem 0.35rem;
+  border-bottom: 1px solid #30363d;
+  color: #c9d1d9;
+}
+
+.service-states__table th {
+  color: #8b949e;
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
+.service-states__name {
+  font-weight: 600;
+}
