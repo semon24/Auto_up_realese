@@ -1,36 +1,22 @@
 {
-  "stack": {
-    "release-2026-04-15": {
-      "services": {
-        "server": {
-          "state": "running",
-          "health": "healthy"
+    "stack": {
+      "release-2026-04-15": {
+        "services": {
+          "server": {
+            "state": "running",
+            "health": "healthy"
+          },
+          "migrator": {
+            "state": "exited",
+            "health": null
+          }
         },
-        "migrator": {
-          "state": "exited",
-          "health": null
+        "operation": {
+          "type": "start",
+          "status": "success",
+          "error": null,
+          "updatedAtUtc": "2026-04-15T12:34:56.789+00:00"
         }
-      },
-      "operation": {
-        "type": "start",
-        "status": "success",
-        "error": null,
-        "updatedAtUtc": "2026-04-15T12:34:56.789+00:00"
-      },
-      "ports": {
-        "RABBITMQ_PORT_1": 1030,
-        "RABBITMQ_PORT_2": 1031,
-        "POSTGRES_PORT": 1032,
-        "MASTER_POSTGRES_PORT": 1033,
-        "FILE_STORAGE_PORT": 1034,
-        "SPEECH_PORT": 1035,
-        "CALL_PORT": 1036,
-        "PORTAL_PORT": 1037,
-        "ADMIN_PORT": 1038,
-        "SERVER_PORT": 1039,
-        "TELEMETRY_COLLECTOR_PORT_1": 1040,
-        "TELEMETRY_COLLECTOR_PORT_2": 1041
       }
     }
-  }
 }

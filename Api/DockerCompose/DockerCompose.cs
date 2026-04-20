@@ -43,7 +43,7 @@ public static partial class DockerCompose
                 return false;
 
             var allServices = allServicesOut
-                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(s => !NonBlockingServices.Contains(s))
                 .ToHashSet(StringComparer.Ordinal);
 
@@ -57,7 +57,7 @@ public static partial class DockerCompose
                 return false;
 
             var runningServices = runningOut
-                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToHashSet(StringComparer.Ordinal);
 
             return allServices.All(runningServices.Contains);
@@ -92,7 +92,7 @@ public static partial class DockerCompose
             }
             else
             {
-                foreach (var line in stdout.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                foreach (var line in stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 {
                     using var doc = JsonDocument.Parse(line);
                     AddServiceState(result, doc.RootElement);

@@ -58,6 +58,7 @@ builder.Services.AddSingleton(sp =>
         ServiceLinkEnvKeys = options.ServiceLinkEnvKeys
     };
 });
+builder.Services.AddSingleton<AgentSessionStore>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -72,6 +73,7 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 app.UseCors();
+app.UseWebSockets();
 var settings = app.Services.GetRequiredService<ResolvedAppOptions>();
 
 var swaggerEnabled = app.Environment.IsDevelopment() || settings.EnableSwagger;
@@ -98,6 +100,20 @@ var registryPassword = settings.RegistryPassword;
 var serviceLinkEnvKeys = settings.ServiceLinkEnvKeys;
 
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
+
+app.Map("/api/agent/ws", async (HttpContext context, AgentSessionStore sessions) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await context.Response.WriteAsync("WebSocket upgrade required");
+        return;
+    }
+
+    var hostName = context.Request.Query["hostName"].FirstOrDefault();
+    var ws = await context.WebSockets.AcceptWebSocketAsync();
+    await sessions.RunAgentWebSocketAsync(hostName, ws, context.RequestAborted);
+});
 
 app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
 {
