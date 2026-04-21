@@ -5,6 +5,9 @@ services:
       SERVER_BACKEND_URL: ${SERVER_BACKEND_URL}
       AGENT_HOST_NAME: ${AGENT_HOST_NAME}
       AGENT_RECONNECT_SECONDS: ${AGENT_RECONNECT_SECONDS}
+      AGENT_PASSWORD_JSON_PATH: ${AGENT_PASSWORD_JSON_PATH:-/opt/agent/agent-credentials.json}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - /opt/agent:/opt/agent
     restart: "no"

@@ -18,24 +18,28 @@ public sealed class AgentWorker : BackgroundService
         {
             try
             {
-                var raw = Environment.GetEnvironmentVariable("SERVER_BACKEND_URL") ?? "";
-                var baseUri = new Uri(raw.Trim().TrimEnd('/'));
-
-                var wsUri = BuildWebSocketUri(baseUri, hostName);
-
-                using var ws = new ClientWebSocket();
-                if (baseUri.Host.Contains("ngrok", StringComparison.OrdinalIgnoreCase))
-                    ws.Options.SetRequestHeader("ngrok-skip-browser-warning", "true");
-
-                await ws.ConnectAsync(wsUri, stoppingToken);
+                using var ws = await AgentWebSocketConnection.ConnectAsync(hostName, stoppingToken);
                 Console.WriteLine("[agent] подключено");
 
-                var buffer = new byte[4096];
-                while (ws.State == WebSocketState.Open && !stoppingToken.IsCancellationRequested)
+                try
                 {
-                    var r = await ws.ReceiveAsync(buffer, stoppingToken);
-                    if (r.MessageType == WebSocketMessageType.Close)
-                        break;
+                    await AgentWebSocketMessages.RunReceiveLoopAsync(ws, stoppingToken);
+                }
+                finally
+                {
+                    if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                    {
+                        try
+                        {
+                            await ws.CloseAsync(
+                                WebSocketCloseStatus.NormalClosure,
+                                "shutdown",
+                                CancellationToken.None);
+                        }
+                        catch
+                        {
+                        }
+                    }
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -52,17 +56,5 @@ public sealed class AgentWorker : BackgroundService
         }
 
         Console.WriteLine("[agent] выход");
-    }
-
-    static Uri BuildWebSocketUri(Uri apiBase, string host)
-    {
-        var scheme = string.Equals(apiBase.Scheme, "https", StringComparison.OrdinalIgnoreCase) ? "wss" : "ws";
-        var ub = new UriBuilder(apiBase)
-        {
-            Scheme = scheme,
-            Path = $"{apiBase.AbsolutePath.TrimEnd('/')}/api/agent/ws",
-            Query = $"hostName={Uri.EscapeDataString(host)}"
-        };
-        return ub.Uri;
     }
 }

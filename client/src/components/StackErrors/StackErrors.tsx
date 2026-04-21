@@ -7,15 +7,12 @@ interface StackErrorsProps {
 }
 
 export function StackErrors({ items, formatError }: StackErrorsProps) {
-  if (items.length === 0) return null;
-
   return (
-    <div className="main-errors">
-      {items.map((stack, index) => (
-        <div key={stack.tag} className="main-errors__item">
-          {index > 0 && <hr className="main-errors__divider" />}
-          <p className="main-errors__title">Ошибка для тега: {stack.tag}</p>
-          <pre className="main-errors__text">
+    <div className="stack-errors">
+      {items.map((stack) => (
+        <div key={stack.tag} className="stack-errors__item">
+          <strong className="stack-errors__tag">{stack.tag}</strong>
+          <pre className="stack-errors__pre">
             {formatError(stack.operationError ?? "")}
           </pre>
         </div>

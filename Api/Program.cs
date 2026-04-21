@@ -1,4 +1,6 @@
 using AutoUpRelease.Api;
+using AutoUpRelease.Api.Agents;
+using AutoUpRelease.Api.Agents.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 
@@ -20,6 +22,9 @@ builder.Services
     .Bind(builder.Configuration)
     .Validate(o => !string.IsNullOrWhiteSpace(o.DeployProjectsDir), "DEPLOY_PROJECTS_DIR is required")
     .Validate(o => Path.IsPathRooted(o.DeployProjectsDir.Trim()), "DEPLOY_PROJECTS_DIR must be absolute")
+    .Validate(
+        o => string.IsNullOrWhiteSpace(o.AgentsJsonPath) || Path.IsPathRooted(o.AgentsJsonPath.Trim()),
+        "AGENTS_JSON_PATH must be absolute when set")
     .ValidateOnStart();
 builder.Services.AddSingleton(sp =>
 {
@@ -42,9 +47,14 @@ builder.Services.AddSingleton(sp =>
     if (!Directory.Exists(folderForCopyDir))
         throw new InvalidOperationException($"Папка шаблона не найдена: {folderForCopyDir}. Укажите COPY_FOLDER_FOR_DEPLOY_PATH.");
 
+    string? agentsJsonPath = null;
+    if (!string.IsNullOrWhiteSpace(options.AgentsJsonPath))
+        agentsJsonPath = Path.GetFullPath(options.AgentsJsonPath.Trim());
+
     return new ResolvedAppOptions
     {
         EnableSwagger = options.EnableSwagger,
+        AgentsJsonPath = agentsJsonPath,
         DeployProjectsDir = deployProjectsDir,
         FolderForCopyDir = folderForCopyDir,
         StateFileName = stateFileName,
@@ -57,6 +67,11 @@ builder.Services.AddSingleton(sp =>
         RegistryPassword = options.RegistryPassword,
         ServiceLinkEnvKeys = options.ServiceLinkEnvKeys
     };
+});
+builder.Services.AddSingleton(sp =>
+{
+    var o = sp.GetRequiredService<ResolvedAppOptions>();
+    return new AgentsJsonFile(o.AgentsJsonPath);
 });
 builder.Services.AddSingleton<AgentSessionStore>();
 
@@ -72,9 +87,10 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+var settings = app.Services.GetRequiredService<ResolvedAppOptions>();
+AgentsJsonBootstrap.EnsureExists(settings.AgentsJsonPath);
 app.UseCors();
 app.UseWebSockets();
-var settings = app.Services.GetRequiredService<ResolvedAppOptions>();
 
 var swaggerEnabled = app.Environment.IsDevelopment() || settings.EnableSwagger;
 if (swaggerEnabled)
@@ -101,19 +117,7 @@ var serviceLinkEnvKeys = settings.ServiceLinkEnvKeys;
 
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
 
-app.Map("/api/agent/ws", async (HttpContext context, AgentSessionStore sessions) =>
-{
-    if (!context.WebSockets.IsWebSocketRequest)
-    {
-        context.Response.StatusCode = StatusCodes.Status400BadRequest;
-        await context.Response.WriteAsync("WebSocket upgrade required");
-        return;
-    }
-
-    var hostName = context.Request.Query["hostName"].FirstOrDefault();
-    var ws = await context.WebSockets.AcceptWebSocketAsync();
-    await sessions.RunAgentWebSocketAsync(hostName, ws, context.RequestAborted);
-});
+app.MapAgentEndpoints();
 
 app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
 {
@@ -134,7 +138,7 @@ app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
     }
 });
 
-app.MapGet("/api/status", async () =>
+app.MapGet("/api/status", async (AgentsJsonFile agentsJsonFile) =>
 {
     try
     {
@@ -203,7 +207,7 @@ app.MapGet("/api/status", async () =>
             });
         }
 
-        return Results.Json(new { running, stacks });
+        return Results.Json(new { running, stacks, agents = agentsJsonFile.ReadSnapshot() });
     }
     catch (Exception e)
     {

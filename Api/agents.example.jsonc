@@ -1,0 +1,15 @@
+// Пример файла agents.json (путь задаётся в AGENTS_JSON_PATH — абсолютный путь к реальному файлу).
+// Формат: один JSON-объект, ключ — имя хоста агента (как в WebSocket ?hostName=... и AGENT_HOST_NAME на агенте),
+// значение — строка статуса для UI и логики API.
+//
+// Возможные значения статуса (как в AgentsJsonFile):
+//   "waiting for password" — агент подключён по WebSocket, ждём ввод пароля в UI
+//   "password accepted"    — пароль подтверждён агентом, можно считать сессию «вошедшей»
+//
+// Пустой объект {} — ни одного агента не отслеживается.
+// При старте API при отсутствии файла создаётся "{}" (см. AgentsJsonBootstrap).
+
+{
+  "MY-WINDOWS-PC": "waiting for password",
+  "build-worker-01": "password accepted"
+}

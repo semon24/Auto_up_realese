@@ -7,6 +7,7 @@ export interface AppState {
   status: {
     running: boolean;
     stacks: StackRuntimeItem[];
+    agents: Record<string, string>;
   };
   selectedTagView: string | null;
   query: string;
@@ -19,7 +20,7 @@ export const initialAppState: AppState = {
   items: [],
   tagsError: null,
   tagsLoading: false,
-  status: { running: false, stacks: [] },
+  status: { running: false, stacks: [], agents: {} },
   selectedTagView: null,
   query: "",
   open: false,
@@ -35,6 +36,7 @@ export type AppAction =
       type: "STATUS_SUCCESS";
       running: boolean;
       stacks?: StackRuntimeItem[];
+      agents?: Record<string, string>;
     }
   | { type: "QUERY_CHANGE"; query: string }
   | { type: "OPEN_SET"; open: boolean }
@@ -62,6 +64,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         status: {
           running: action.running,
           stacks: action.stacks ?? [],
+          agents: action.agents ?? {},
         },
       };
     case "QUERY_CHANGE":

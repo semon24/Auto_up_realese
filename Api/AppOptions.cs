@@ -7,6 +7,10 @@ public sealed class AppOptions
     [ConfigurationKeyName("EnableSwagger")]
     public bool EnableSwagger { get; set; }
 
+    /// <summary>Абсолютный путь к agents.json. Пусто — не создавать файл при старте.</summary>
+    [ConfigurationKeyName("AGENTS_JSON_PATH")]
+    public string AgentsJsonPath { get; set; } = "";
+
     [ConfigurationKeyName("DEPLOY_PROJECTS_DIR")]
     public string DeployProjectsDir { get; set; } = "/opt/vneocheredi_auto_release_up/deploy_auto_up_release";
 
@@ -44,6 +48,8 @@ public sealed class AppOptions
 public sealed class ResolvedAppOptions
 {
     public required bool EnableSwagger { get; init; }
+    /// <summary>Полный путь к agents.json или null, если AGENTS_JSON_PATH не задан.</summary>
+    public string? AgentsJsonPath { get; init; }
     public required string DeployProjectsDir { get; init; }
     public required string FolderForCopyDir { get; init; }
     public required string StateFileName { get; init; }

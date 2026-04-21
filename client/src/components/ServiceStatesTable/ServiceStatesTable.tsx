@@ -2,29 +2,27 @@ import type { RuntimeServiceState } from "../../types";
 import "./ServiceStatesTable.css";
 
 interface ServiceStatesTableProps {
-  items: Array<[string, RuntimeServiceState]>;
+  items: [string, RuntimeServiceState][];
 }
 
 export function ServiceStatesTable({ items }: ServiceStatesTableProps) {
-  if (items.length === 0) return null;
-
   return (
     <div className="service-states">
-      <p className="service-states__title">Состояние сервисов</p>
+      <h3 className="service-states__title">Сервисы</h3>
       <table className="service-states__table">
         <thead>
           <tr>
-            <th>Название</th>
-            <th>State</th>
+            <th>Сервис</th>
+            <th>Состояние</th>
             <th>Health</th>
           </tr>
         </thead>
         <tbody>
-          {items.map(([serviceName, service]) => (
-            <tr key={serviceName}>
-              <td className="service-states__name">{serviceName}</td>
-              <td>{service.state}</td>
-              <td>{service.health ?? "-"}</td>
+          {items.map(([name, s]) => (
+            <tr key={name}>
+              <td className="service-states__name">{name}</td>
+              <td>{s.state}</td>
+              <td>{s.health ?? "—"}</td>
             </tr>
           ))}
         </tbody>

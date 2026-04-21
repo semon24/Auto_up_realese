@@ -6,7 +6,7 @@ import { StackErrors } from "../components/StackErrors/StackErrors";
 import { StackSidebar } from "../components/StackSidebar/StackSidebar";
 import { TagSelector } from "../components/TagSelector/TagSelector";
 import { useOutsideClick } from "../hooks/useOutsideClick";
-import { useRuntimePolling } from "../hooks/useRuntimePolling";
+import { usePolling } from "../pollingContext";
 import { dispatchApp, useAppStore } from "../store/appStore";
 import { formatErrorForUi } from "../utils/formatErrorForUi";
 import "./MainPage.css";
@@ -27,7 +27,7 @@ export function MainPage() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [pendingStartTags, setPendingStartTags] = useState<string[]>([]);
   const [pendingStopTags, setPendingStopTags] = useState<string[]>([]);
-  const { loadTags, loadStatus } = useRuntimePolling();
+  const { loadTags, loadStatus } = usePolling();
 
   const closeTagPicker = useCallback(() => {
     dispatchApp({ type: "OPEN_SET", open: false });
@@ -219,7 +219,7 @@ export function MainPage() {
         selectedStack?.operationStatus === "success" &&
         selectedStack.serviceLinks && (
           <ServiceLinks links={selectedStack.serviceLinks} />
-      )}
+        )}
 
       {selectedTagView && <ServiceStatesTable items={selectedServices} />}
     </div>

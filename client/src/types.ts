@@ -16,6 +16,7 @@ export interface ServiceLinks {
 export interface StatusResponse {
   running?: boolean;
   stacks?: StackRuntimeItem[];
+  agents?: Record<string, string>;
 }
 
 export interface RuntimeServiceState {

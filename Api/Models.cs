@@ -9,6 +9,9 @@ public record StartBody(
 public record StopBody(
     [property: JsonPropertyName("tag")] string? Tag);
 
+public record AgentPasswordBody(
+    [property: JsonPropertyName("password")] string? Password);
+
 public record TagItem(string Tag);
 
 public class ServiceLinkEnvKeys

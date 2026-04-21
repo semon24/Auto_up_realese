@@ -1,0 +1,55 @@
+.agents-page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 1.5rem 4rem;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.agents-page__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e6edf3;
+  text-align: center;
+}
+
+.agents-page__list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agents-page__card-wrap {
+  width: 100%;
+}
+
+.agents-page__card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  width: 100%;
+}
+
+.agents-page__card-wrap .stack-card {
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.agents-page__card--click:hover {
+  filter: brightness(1.06);
+}
+
+.agents-page__empty {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #8b949e;
+  text-align: center;
+}

@@ -22,6 +22,7 @@ export function useRuntimePolling() {
         type: "STATUS_SUCCESS",
         running: !!data.running,
         stacks: data.stacks ?? [],
+        agents: data.agents ?? {},
       });
     } catch {
       /* ignore status polling errors */

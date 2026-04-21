@@ -6,38 +6,26 @@ interface ServiceLinksProps {
 }
 
 export function ServiceLinks({ links }: ServiceLinksProps) {
+  const entries = (
+    [
+      ["admin", links.admin],
+      ["server", links.server],
+      ["portal", links.portal],
+      ["call", links.call],
+    ] as const
+  ).filter(([, url]) => url && url.trim().length > 0) as [string, string][];
+
   return (
     <div className="service-links">
-      <p className="service-links__title">Сервисы</p>
+      <h3 className="service-links__title">Ссылки</h3>
       <ul className="service-links__list">
-        {links.admin && (
-          <li>
-            <a href={links.admin} target="_blank" rel="noopener noreferrer">
-              Admin
+        {entries.map(([label, url]) => (
+          <li key={label}>
+            <a href={url} target="_blank" rel="noreferrer">
+              {label}: {url}
             </a>
           </li>
-        )}
-        {links.server && (
-          <li>
-            <a href={links.server} target="_blank" rel="noopener noreferrer">
-              Server
-            </a>
-          </li>
-        )}
-        {links.call && (
-          <li>
-            <a href={links.call} target="_blank" rel="noopener noreferrer">
-              Call
-            </a>
-          </li>
-        )}
-        {links.portal && (
-          <li>
-            <a href={links.portal} target="_blank" rel="noopener noreferrer">
-              Portal
-            </a>
-          </li>
-        )}
+        ))}
       </ul>
     </div>
   );

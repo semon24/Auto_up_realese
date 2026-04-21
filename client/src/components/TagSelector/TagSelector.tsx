@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { type RefObject, useRef } from "react";
 import type { TagItem } from "../../types";
 import "./TagSelector.css";
 
@@ -23,30 +23,37 @@ export function TagSelector({
   onOpen,
   onPick,
 }: TagSelectorProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
-    <div className="combo-wrap" ref={wrapRef}>
-      <input
-        className="search"
-        type="search"
-        placeholder="Поиск по тегу…"
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        onFocus={onOpen}
-        autoComplete="off"
-        aria-expanded={open}
-        aria-controls="tag-listbox"
-      />
+    <div className="tag-selector" ref={wrapRef}>
+      <div className="tag-selector__field">
+        <input
+          ref={inputRef}
+          type="text"
+          className="tag-selector__input"
+          placeholder="Тег образа..."
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onFocus={() => onOpen()}
+          autoComplete="off"
+        />
+      </div>
       {open && filtered.length > 0 && (
-        <ul id="tag-listbox" className="list" role="listbox">
-          {filtered.map((x) => (
-            <li
-              key={x.tag}
-              role="option"
-              aria-selected={effectiveTag === x.tag}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onPick(x.tag)}
-            >
-              {x.tag}
+        <ul className="tag-selector__dropdown" role="listbox">
+          {filtered.map((item) => (
+            <li key={item.tag}>
+              <button
+                type="button"
+                className={
+                  effectiveTag === item.tag
+                    ? "tag-selector__item tag-selector__item--effective"
+                    : "tag-selector__item"
+                }
+                onClick={() => onPick(item.tag)}
+              >
+                {item.tag}
+              </button>
             </li>
           ))}
         </ul>
