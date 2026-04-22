@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
+  AGENT_STATUS_DISCONNECTED,
   AGENT_STATUS_PASSWORD_ACCEPTED,
   AGENT_STATUS_WAITING_PASSWORD,
 } from "../constants";
@@ -29,11 +30,15 @@ export function AgentsPage() {
               agentStatus === AGENT_STATUS_WAITING_PASSWORD;
             const isPasswordAccepted =
               agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED;
-            const cardClass = isWaiting
-              ? "stack-card is-loading agents-page__card--click"
-              : isPasswordAccepted
-                ? "stack-card is-running agents-page__card--click"
-                : "stack-card agents-page__card--click";
+            const isDisconnected =
+              agentStatus === AGENT_STATUS_DISCONNECTED;
+            const cardClass = isDisconnected
+              ? "stack-card is-disconnected agents-page__card--click"
+              : isWaiting
+                ? "stack-card is-loading agents-page__card--click"
+                : isPasswordAccepted
+                  ? "stack-card is-running agents-page__card--click"
+                  : "stack-card agents-page__card--click";
             const to = `/agents/${encodeURIComponent(hostName)}`;
             return (
               <div key={hostName} className="agents-page__card-wrap">

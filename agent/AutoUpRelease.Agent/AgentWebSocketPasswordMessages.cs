@@ -32,6 +32,9 @@ internal static class AgentWebSocketPasswordMessages
         var stored = AgentPasswordBootstrap.TryReadPassword();
         var ok = stored is not null && Utf8FixedTimeEquals(stored, submitted);
 
+        if (ws.State != WebSocketState.Open)
+            return true;
+
         var response = JsonSerializer.Serialize(new
         {
             type = TypePasswordVerified,

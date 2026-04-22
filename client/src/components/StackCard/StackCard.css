@@ -34,6 +34,11 @@
   background: rgba(210, 153, 34, 0.2);
 }
 
+.stack-card.is-disconnected {
+  border-color: #da3633;
+  background: rgba(218, 54, 51, 0.18);
+}
+
 .stack-card.is-active {
   border-color: #58a6ff;
   box-shadow: none;

@@ -49,6 +49,9 @@ public sealed partial class AgentSessionStore
                 password
             });
             var bytes = Encoding.UTF8.GetBytes(payload);
+            if (ws.State != WebSocketState.Open)
+                return (false, "Агент не подключён");
+
             await ws.SendAsync(
                 new ArraySegment<byte>(bytes),
                 WebSocketMessageType.Text,
@@ -83,34 +86,19 @@ public sealed partial class AgentSessionStore
             p.Tcs.TrySetCanceled();
     }
 
-    void TryHandleIncomingJson(string normalizedHostName, string text, HeartbeatSilenceWatch silenceWatch)
+    void TryHandlePasswordIncomingJson(string normalizedHostName, JsonElement root)
     {
-        try
-        {
-            using var doc = JsonDocument.Parse(text);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String)
-                return;
-            if (string.Equals(typeEl.GetString(), MessageTypeAppPong, StringComparison.Ordinal))
-            {
-                silenceWatch.NotifyPongReceived();
-                return;
-            }
-
-            if (!string.Equals(typeEl.GetString(), MessageTypePasswordVerified, StringComparison.Ordinal))
-                return;
-            if (!root.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
-                return;
-            if (!Guid.TryParse(idEl.GetString(), out var msgId))
-                return;
-            if (!_passwordVerifyWaiters.TryGetValue(normalizedHostName, out var pending) || pending.Id != msgId)
-                return;
-            var ok = root.TryGetProperty("ok", out var okEl) && okEl.ValueKind == JsonValueKind.True;
-            pending.Tcs.TrySetResult(ok);
-        }
-        catch
-        {
-            // некорректный JSON — игнор
-        }
+        if (!root.TryGetProperty("type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String)
+            return;
+        if (!string.Equals(typeEl.GetString(), MessageTypePasswordVerified, StringComparison.Ordinal))
+            return;
+        if (!root.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
+            return;
+        if (!Guid.TryParse(idEl.GetString(), out var msgId))
+            return;
+        if (!_passwordVerifyWaiters.TryGetValue(normalizedHostName, out var pending) || pending.Id != msgId)
+            return;
+        var ok = root.TryGetProperty("ok", out var okEl) && okEl.ValueKind == JsonValueKind.True;
+        pending.Tcs.TrySetResult(ok);
     }
 }

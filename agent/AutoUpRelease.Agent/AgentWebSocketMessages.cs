@@ -7,72 +7,42 @@ namespace AutoUpRelease.Agent;
 /// <summary>Приём полных текстовых сообщений с сервера и маршрутизация в <see cref="AgentWebSocketHeartbeatMessages"/> / <see cref="AgentWebSocketPasswordMessages"/>.</summary>
 internal static class AgentWebSocketMessages
 {
-    static readonly TimeSpan HeartbeatSilenceTimeout = TimeSpan.FromSeconds(30);
-
     internal static async Task RunReceiveLoopAsync(ClientWebSocket ws, CancellationToken stoppingToken)
     {
-        using var loopCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        var watch = new AgentHeartbeatWatch();
-        var watchdogTask = RunHeartbeatSilenceWatchdogAsync(ws, watch, loopCts.Token);
-
         using var bufferMs = new MemoryStream();
         var scratch = new byte[4096];
+        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] запускаем receive loop, state={ws.State}");
         try
         {
-            while (ws.State == WebSocketState.Open && !loopCts.Token.IsCancellationRequested)
+            while (ws.State == WebSocketState.Open && !stoppingToken.IsCancellationRequested)
             {
-                var text = await ReceiveFullTextAsync(ws, bufferMs, scratch, loopCts.Token);
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] ждём следующее сообщение от api, state={ws.State}");
+                var text = await ReceiveFullTextAsync(ws, bufferMs, scratch, stoppingToken);
                 if (text is null)
+                {
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] receive loop получил close/конец потока");
                     break;
-                await HandleServerTextAsync(ws, text, loopCts.Token, watch);
+                }
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получили текстовое сообщение длиной {text.Length}");
+                await HandleServerTextAsync(ws, text, stoppingToken);
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] receive loop отменён токеном остановки");
+        }
+        catch (WebSocketException ex)
+        {
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] WebSocketException в receive loop: {ex.Message}; state={ws.State}");
+            throw;
         }
         finally
         {
-            loopCts.Cancel();
-            try
-            {
-                await watchdogTask;
-            }
-            catch
-            {
-            }
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] выходим из receive loop, final state={ws.State}");
         }
     }
 
-    static async Task RunHeartbeatSilenceWatchdogAsync(
-        ClientWebSocket ws,
-        AgentHeartbeatWatch watch,
-        CancellationToken ct)
-    {
-        try
-        {
-            while (ws.State == WebSocketState.Open && !ct.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(5), ct);
-                if (watch.IsSilentLongerThan(HeartbeatSilenceTimeout))
-                {
-                    try
-                    {
-                        await ws.CloseAsync(
-                            WebSocketCloseStatus.NormalClosure,
-                            "heartbeat silence",
-                            CancellationToken.None);
-                    }
-                    catch
-                    {
-                    }
-
-                    return;
-                }
-            }
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-        }
-    }
-
-    static async Task HandleServerTextAsync(ClientWebSocket ws, string text, CancellationToken ct, AgentHeartbeatWatch watch)
+    static async Task HandleServerTextAsync(ClientWebSocket ws, string text, CancellationToken ct)
     {
         JsonDocument doc;
         try
@@ -87,7 +57,7 @@ internal static class AgentWebSocketMessages
         using (doc)
         {
             var root = doc.RootElement;
-            if (await AgentWebSocketHeartbeatMessages.TryHandleAsync(ws, root, ct, watch))
+            if (await AgentWebSocketHeartbeatMessages.TryHandleAsync(ws, root, ct))
                 return;
             if (await AgentWebSocketPasswordMessages.TryHandleAsync(ws, root, ct))
                 return;
@@ -105,8 +75,12 @@ internal static class AgentWebSocketMessages
         while (!messageComplete)
         {
             var result = await ws.ReceiveAsync(new ArraySegment<byte>(scratch), cancellationToken);
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] ReceiveAsync: type={result.MessageType}, count={result.Count}, end={result.EndOfMessage}");
             if (result.MessageType == WebSocketMessageType.Close)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получен close frame: closeStatus={result.CloseStatus}, description={result.CloseStatusDescription ?? "<null>"}");
                 return null;
+            }
             if (result.MessageType == WebSocketMessageType.Text)
                 bufferMs.Write(scratch, 0, result.Count);
             messageComplete = result.EndOfMessage;

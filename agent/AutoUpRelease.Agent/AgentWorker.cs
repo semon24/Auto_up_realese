@@ -19,18 +19,21 @@ public sealed class AgentWorker : BackgroundService
             try
             {
                 using var ws = await AgentWebSocketConnection.ConnectAsync(hostName, stoppingToken);
-                Console.WriteLine("[agent] подключено");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] подключено: {hostName}");
 
                 try
                 {
                     await AgentWebSocketMessages.RunReceiveLoopAsync(ws, stoppingToken);
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] соединение разорвано, состояние сокета: {ws.State}");
                 }
                 finally
                 {
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] вошли в finally AgentWorker, state={ws.State}");
                     if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
                     {
                         try
                         {
+                            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] вызываем CloseAsync, state={ws.State}");
                             await ws.CloseAsync(
                                 WebSocketCloseStatus.NormalClosure,
                                 "shutdown",
@@ -40,6 +43,7 @@ public sealed class AgentWorker : BackgroundService
                         {
                         }
                     }
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] финальное состояние сокета в AgentWorker: {ws.State}");
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

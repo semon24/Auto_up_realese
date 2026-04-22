@@ -179,7 +179,7 @@ app.MapGet("/api/status", async (AgentsJsonFile agentsJsonFile) =>
             break;
         }
 
-        Console.WriteLine($"[status] running={running}");
+        //Console.WriteLine($"[status] running={running}");
 
         var stacks = new List<object>(stackDirs.Count);
         foreach (var stackDir in stackDirs)

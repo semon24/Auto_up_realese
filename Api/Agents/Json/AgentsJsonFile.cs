@@ -8,6 +8,7 @@ public sealed class AgentsJsonFile
 {
     public const string StatusWaitingForPassword = "waiting for password";
     public const string StatusPasswordAccepted = "password accepted";
+    public const string StatusDisconnected = "disconnected";
 
     readonly string? _path;
     readonly object _lock = new();
@@ -27,18 +28,51 @@ public sealed class AgentsJsonFile
         }
     }
 
-    public void UpsertWaiting(string hostName)
+    /// <summary>
+    /// Агент открыл WebSocket: новый хост или после «waiting for password» → «waiting for password»;
+    /// после «password accepted» / «disconnected» → сразу «password accepted» (повторный ввод пароля не нужен).
+    /// </summary>
+    public void UpsertOnAgentConnected(string hostName)
     {
         if (_path is null) return;
         lock (_lock)
         {
             var map = ReadMap(_path);
-            map[hostName] = StatusWaitingForPassword;
+            if (map.TryGetValue(hostName, out var st))
+            {
+                if (string.Equals(st, StatusDisconnected, StringComparison.Ordinal) ||
+                    string.Equals(st, StatusPasswordAccepted, StringComparison.Ordinal))
+                    map[hostName] = StatusPasswordAccepted;
+                else
+                    map[hostName] = StatusWaitingForPassword;
+            }
+            else
+                map[hostName] = StatusWaitingForPassword;
+
             WriteMap(_path, map);
         }
     }
 
-    /// <summary>Удаляет хост из файла (в т.ч. при закрытии WebSocket агента).</summary>
+    /// <summary>
+    /// Закрытие WebSocket: при «password accepted» → «disconnected», иначе запись удаляется (ещё не вводили пароль и т.п.).
+    /// </summary>
+    public void OnAgentWebSocketClosed(string hostName)
+    {
+        if (_path is null) return;
+        lock (_lock)
+        {
+            var map = ReadMap(_path);
+            if (!map.TryGetValue(hostName, out var st))
+                return;
+            if (string.Equals(st, StatusPasswordAccepted, StringComparison.Ordinal))
+                map[hostName] = StatusDisconnected;
+            else
+                map.Remove(hostName);
+            WriteMap(_path, map);
+        }
+    }
+
+    /// <summary>Удаляет хост из файла (ручная очистка и т.д.).</summary>
     public void Remove(string hostName)
     {
         if (_path is null) return;
@@ -49,6 +83,47 @@ public sealed class AgentsJsonFile
                 return;
             WriteMap(_path, map);
         }
+    }
+
+    /// <summary>
+    /// Удаляет запись только в статусе <see cref="StatusDisconnected"/> (как «никогда не подключался»).
+    /// </summary>
+    public bool TryRemoveIfDisconnected(string hostName, out string? error)
+    {
+        error = null;
+        if (_path is null)
+        {
+            error = "AGENTS_JSON_PATH не задан";
+            return false;
+        }
+
+        var key = hostName.Trim();
+        if (string.IsNullOrEmpty(key))
+        {
+            error = "hostName пустой";
+            return false;
+        }
+
+        lock (_lock)
+        {
+            var map = ReadMap(_path);
+            if (!map.TryGetValue(key, out var st))
+            {
+                error = "Агент не найден";
+                return false;
+            }
+
+            if (!string.Equals(st, StatusDisconnected, StringComparison.Ordinal))
+            {
+                error = "Удалить можно только агента в статусе disconnected";
+                return false;
+            }
+
+            map.Remove(key);
+            WriteMap(_path, map);
+        }
+
+        return true;
     }
 
     /// <summary>

@@ -45,6 +45,13 @@ public static class AgentRoutes
             return Results.Json(new { ok = true });
         });
 
+        app.MapDelete("/api/agents/{hostName}", (string hostName, AgentsJsonFile agentsJson) =>
+        {
+            if (!agentsJson.TryRemoveIfDisconnected(hostName, out var err))
+                return Results.Json(new { error = err }, statusCode: 400);
+            return Results.Json(new { ok = true });
+        });
+
         return app;
     }
 }

@@ -5,11 +5,13 @@
 // Возможные значения статуса (как в AgentsJsonFile):
 //   "waiting for password" — агент подключён по WebSocket, ждём ввод пароля в UI
 //   "password accepted"    — пароль подтверждён агентом, можно считать сессию «вошедшей»
+//   "disconnected"         — после «password accepted» сокет закрылся; при новом WS снова «password accepted» без пароля
 //
 // Пустой объект {} — ни одного агента не отслеживается.
 // При старте API при отсутствии файла создаётся "{}" (см. AgentsJsonBootstrap).
 
 {
   "MY-WINDOWS-PC": "waiting for password",
-  "build-worker-01": "password accepted"
+  "build-worker-01": "password accepted",
+  "old-host": "disconnected"
 }
