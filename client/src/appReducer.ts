@@ -38,6 +38,8 @@ export type AppAction =
       stacks?: StackRuntimeItem[];
       agents?: Record<string, string>;
     }
+  | { type: "AGENTS_SNAPSHOT"; agents: Record<string, string> }
+  | { type: "AGENT_UPDATED"; hostName: string; status: string | null }
   | { type: "QUERY_CHANGE"; query: string }
   | { type: "OPEN_SET"; open: boolean }
   | { type: "ACTION_ERROR_SET"; error: string | null }
@@ -64,9 +66,29 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         status: {
           running: action.running,
           stacks: action.stacks ?? [],
-          agents: action.agents ?? {},
+          agents: action.agents ?? state.status.agents,
         },
       };
+    case "AGENTS_SNAPSHOT":
+      return {
+        ...state,
+        status: {
+          ...state.status,
+          agents: action.agents,
+        },
+      };
+    case "AGENT_UPDATED": {
+      const nextAgents = { ...state.status.agents };
+      if (action.status === null) delete nextAgents[action.hostName];
+      else nextAgents[action.hostName] = action.status;
+      return {
+        ...state,
+        status: {
+          ...state.status,
+          agents: nextAgents,
+        },
+      };
+    }
     case "QUERY_CHANGE":
       return { ...state, query: action.query };
     case "OPEN_SET":

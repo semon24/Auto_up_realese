@@ -1,5 +1,6 @@
 using AutoUpRelease.Api;
 using AutoUpRelease.Api.Agents;
+using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -74,6 +75,12 @@ builder.Services.AddSingleton(sp =>
     return new AgentsJsonFile(o.AgentsJsonPath);
 });
 builder.Services.AddSingleton<AgentSessionStore>();
+builder.Services.AddSingleton<AgentHubPublisher>();
+builder.Services.AddSignalR(options =>
+{
+    options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+    options.ClientTimeoutInterval = TimeSpan.FromMinutes(1);
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -90,7 +97,6 @@ var app = builder.Build();
 var settings = app.Services.GetRequiredService<ResolvedAppOptions>();
 AgentsJsonBootstrap.EnsureExists(settings.AgentsJsonPath);
 app.UseCors();
-app.UseWebSockets();
 
 var swaggerEnabled = app.Environment.IsDevelopment() || settings.EnableSwagger;
 if (swaggerEnabled)
@@ -118,6 +124,8 @@ var serviceLinkEnvKeys = settings.ServiceLinkEnvKeys;
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
 
 app.MapAgentEndpoints();
+app.MapHub<AgentsHub>("/hubs/agents");
+app.MapHub<AgentTransportHub>("/hubs/agent");
 
 app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
 {
@@ -138,7 +146,7 @@ app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
     }
 });
 
-app.MapGet("/api/status", async (AgentsJsonFile agentsJsonFile) =>
+app.MapGet("/api/status", async (AgentsJsonFile agentsStatusJsonFile) =>
 {
     try
     {
@@ -207,7 +215,7 @@ app.MapGet("/api/status", async (AgentsJsonFile agentsJsonFile) =>
             });
         }
 
-        return Results.Json(new { running, stacks, agents = agentsJsonFile.ReadSnapshot() });
+        return Results.Json(new { running, stacks, agents = agentsStatusJsonFile.ReadSnapshot() });
     }
     catch (Exception e)
     {

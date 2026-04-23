@@ -1,14 +1,11 @@
 using System.Collections.Concurrent;
-using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
+using Microsoft.AspNetCore.SignalR;
 
 namespace AutoUpRelease.Api.Agents;
 
 public sealed partial class AgentSessionStore
 {
-    public const string MessageTypeVerifyPassword = "verify_password";
-    public const string MessageTypePasswordVerified = "password_verified";
+    public const string ClientMethodVerifyPassword = "verify_password";
 
     readonly ConcurrentDictionary<string, PendingPasswordVerify> _passwordVerifyWaiters = new();
 
@@ -19,8 +16,8 @@ public sealed partial class AgentSessionStore
     }
 
     /// <summary>
-    /// Находит открытый WebSocket для <paramref name="hostName"/>, отправляет JSON с паролем и id,
-    /// ждёт ответ <see cref="MessageTypePasswordVerified"/> с тем же id.
+    /// Находит подключённый SignalR-клиент агента для <paramref name="hostName"/>,
+    /// отправляет запрос проверки пароля и ждёт ответа с тем же id.
     /// </summary>
     public async Task<(bool Ok, string? Error)> VerifyPasswordWithAgentAsync(
         string hostName,
@@ -31,7 +28,7 @@ public sealed partial class AgentSessionStore
         if (Normalize(hostName) is not { } normalizedHostName)
             return (false, "hostName пустой");
 
-        if (!_sockets.TryGetValue(normalizedHostName, out var ws) || ws.State != WebSocketState.Open)
+        if (!_connectionsByHost.TryGetValue(normalizedHostName, out var connectionId))
             return (false, "Агент не подключён");
 
         var id = Guid.NewGuid();
@@ -42,20 +39,16 @@ public sealed partial class AgentSessionStore
 
         try
         {
-            var payload = JsonSerializer.Serialize(new
-            {
-                type = MessageTypeVerifyPassword,
-                id = id.ToString("N"),
-                password
-            });
-            var bytes = Encoding.UTF8.GetBytes(payload);
-            if (ws.State != WebSocketState.Open)
+            if (!_hostsByConnection.ContainsKey(connectionId))
                 return (false, "Агент не подключён");
 
-            await ws.SendAsync(
-                new ArraySegment<byte>(bytes),
-                WebSocketMessageType.Text,
-                endOfMessage: true,
+            await _agentTransportHubContext.Clients.Client(connectionId).SendAsync(
+                ClientMethodVerifyPassword,
+                new
+                {
+                    id = id.ToString("N"),
+                    password
+                },
                 cancellationToken);
 
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -80,25 +73,17 @@ public sealed partial class AgentSessionStore
         }
     }
 
-    void OnAgentSocketClosed(string normalizedHostName)
+    public void HandlePasswordVerified(
+        string connectionId,
+        string id,
+        bool ok)
     {
-        if (_passwordVerifyWaiters.TryRemove(normalizedHostName, out var p))
-            p.Tcs.TrySetCanceled();
-    }
-
-    void TryHandlePasswordIncomingJson(string normalizedHostName, JsonElement root)
-    {
-        if (!root.TryGetProperty("type", out var typeEl) || typeEl.ValueKind != JsonValueKind.String)
+        if (!_hostsByConnection.TryGetValue(connectionId, out var normalizedHostName))
             return;
-        if (!string.Equals(typeEl.GetString(), MessageTypePasswordVerified, StringComparison.Ordinal))
-            return;
-        if (!root.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.String)
-            return;
-        if (!Guid.TryParse(idEl.GetString(), out var msgId))
+        if (!Guid.TryParse(id, out var msgId))
             return;
         if (!_passwordVerifyWaiters.TryGetValue(normalizedHostName, out var pending) || pending.Id != msgId)
             return;
-        var ok = root.TryGetProperty("ok", out var okEl) && okEl.ValueKind == JsonValueKind.True;
         pending.Tcs.TrySetResult(ok);
     }
 }

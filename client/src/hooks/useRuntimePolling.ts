@@ -1,8 +1,9 @@
 import { useCallback, useEffect } from "react";
+import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { api, errMessage } from "../apiClient";
 import { STATUS_POLL_MS, TAGS_POLL_MS } from "../constants";
 import { dispatchApp } from "../store/appStore";
-import type { StatusResponse, TagsResponse } from "../types";
+import type { AgentUpdatedEvent, StatusResponse, TagsResponse } from "../types";
 
 export function useRuntimePolling() {
   const loadTags = useCallback(async () => {
@@ -22,7 +23,6 @@ export function useRuntimePolling() {
         type: "STATUS_SUCCESS",
         running: !!data.running,
         stacks: data.stacks ?? [],
-        agents: data.agents ?? {},
       });
     } catch {
       /* ignore status polling errors */
@@ -40,6 +40,47 @@ export function useRuntimePolling() {
     const id = setInterval(() => void loadStatus(), STATUS_POLL_MS);
     return () => clearInterval(id);
   }, [loadStatus]);
+
+  useEffect(() => {
+    const connection = new HubConnectionBuilder()
+      .withUrl("/hubs/agents")
+      .withAutomaticReconnect()
+      .configureLogging(LogLevel.Warning)
+      .build();
+
+    const syncAgentsSnapshot = async () => {
+      const snapshot =
+        await connection.invoke<Record<string, string>>("GetAgentsSnapshot");
+      dispatchApp({ type: "AGENTS_SNAPSHOT", agents: snapshot ?? {} });
+    };
+
+    connection.on("agent_updated", (payload: AgentUpdatedEvent) => {
+      const hostName = payload?.hostName?.trim();
+      if (!hostName) return;
+      dispatchApp({
+        type: "AGENT_UPDATED",
+        hostName,
+        status: payload.status ?? null,
+      });
+    });
+    connection.onreconnected(() => syncAgentsSnapshot());
+
+    const startConnection = async () => {
+      try {
+        await connection.start();
+        await syncAgentsSnapshot();
+      } catch {
+        // Авто-reconnect покрывает временные сбои сети/бэкенда.
+      }
+    };
+
+    void startConnection();
+
+    return () => {
+      connection.off("agent_updated");
+      void connection.stop();
+    };
+  }, []);
 
   return { loadTags, loadStatus };
 }

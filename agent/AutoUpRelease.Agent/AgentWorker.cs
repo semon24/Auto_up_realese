@@ -1,5 +1,5 @@
-using System.Net.WebSockets;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.SignalR.Client;
 
 namespace AutoUpRelease.Agent;
 
@@ -18,33 +18,7 @@ public sealed class AgentWorker : BackgroundService
         {
             try
             {
-                using var ws = await AgentWebSocketConnection.ConnectAsync(hostName, stoppingToken);
-                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] подключено: {hostName}");
-
-                try
-                {
-                    await AgentWebSocketMessages.RunReceiveLoopAsync(ws, stoppingToken);
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] соединение разорвано, состояние сокета: {ws.State}");
-                }
-                finally
-                {
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] вошли в finally AgentWorker, state={ws.State}");
-                    if (ws.State is WebSocketState.Open or WebSocketState.CloseReceived)
-                    {
-                        try
-                        {
-                            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] вызываем CloseAsync, state={ws.State}");
-                            await ws.CloseAsync(
-                                WebSocketCloseStatus.NormalClosure,
-                                "shutdown",
-                                CancellationToken.None);
-                        }
-                        catch
-                        {
-                        }
-                    }
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] финальное состояние сокета в AgentWorker: {ws.State}");
-                }
+                await RunSignalRSessionAsync(hostName, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -60,5 +34,53 @@ public sealed class AgentWorker : BackgroundService
         }
 
         Console.WriteLine("[agent] выход");
+    }
+
+    static async Task RunSignalRSessionAsync(string hostName, CancellationToken stoppingToken)
+    {
+        var connection = AgentSignalRConnection.Create(hostName);
+        var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        connection.Reconnecting += ex =>
+        {
+            var reason = ex?.Message ?? "без ошибки";
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] SignalR reconnecting: {reason}");
+            return Task.CompletedTask;
+        };
+
+        connection.Reconnected += newConnectionId =>
+        {
+            Console.WriteLine(
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] SignalR reconnected, connectionId={newConnectionId ?? "<null>"}");
+            return Task.CompletedTask;
+        };
+
+        connection.Closed += ex =>
+        {
+            if (ex is null)
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] SignalR соединение закрыто");
+            else
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] SignalR соединение закрыто с ошибкой: {ex.Message}");
+            disconnectedTcs.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        AgentSignalRPasswordMessages.Register(connection);
+        try
+        {
+            await connection.StartAsync(stoppingToken);
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] SignalR подключено: {hostName}");
+            await disconnectedTcs.Task.WaitAsync(stoppingToken);
+        }
+        finally
+        {
+            try
+            {
+                await connection.DisposeAsync();
+            }
+            catch
+            {
+            }
+        }
     }
 }

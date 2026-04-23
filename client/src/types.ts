@@ -19,6 +19,11 @@ export interface StatusResponse {
   agents?: Record<string, string>;
 }
 
+export interface AgentUpdatedEvent {
+  hostName?: string;
+  status?: string | null;
+}
+
 export interface RuntimeServiceState {
   state: string;
   health?: string | null;

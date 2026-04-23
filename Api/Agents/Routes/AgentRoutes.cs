@@ -1,4 +1,5 @@
 using AutoUpRelease.Api;
+using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
 
 namespace AutoUpRelease.Api.Agents;
@@ -8,24 +9,11 @@ public static class AgentRoutes
 {
     public static WebApplication MapAgentEndpoints(this WebApplication app)
     {
-        app.Map("/api/agent/ws", async (HttpContext context, AgentSessionStore sessions) =>
-        {
-            if (!context.WebSockets.IsWebSocketRequest)
-            {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                await context.Response.WriteAsync("WebSocket upgrade required");
-                return;
-            }
-
-            var hostName = context.Request.Query["hostName"].FirstOrDefault();
-            var ws = await context.WebSockets.AcceptWebSocketAsync();
-            await sessions.RunAgentWebSocketAsync(hostName, ws, context.RequestAborted);
-        });
-
         app.MapPost("/api/agents/{hostName}/password", async (string hostName, 
         AgentPasswordBody? body, 
         AgentSessionStore sessions, 
         AgentsJsonFile agentsJson, 
+        AgentHubPublisher agentHubPublisher,
         CancellationToken ct) =>
         {
             var pwd = body?.Password?.Trim();
@@ -42,13 +30,17 @@ public static class AgentRoutes
 
             if (!agentsJson.TryMarkPasswordAccepted(hostName, out var err))
                 return Results.Json(new { error = err }, statusCode: 400);
+
+            await agentHubPublisher.PublishAgentUpdatedAsync(hostName, ct);
+
             return Results.Json(new { ok = true });
         });
 
-        app.MapDelete("/api/agents/{hostName}", (string hostName, AgentsJsonFile agentsJson) =>
+        app.MapDelete("/api/agents/{hostName}", async (string hostName, AgentsJsonFile agentsJson, AgentHubPublisher agentHubPublisher, CancellationToken ct) =>
         {
             if (!agentsJson.TryRemoveIfDisconnected(hostName, out var err))
                 return Results.Json(new { error = err }, statusCode: 400);
+            await agentHubPublisher.PublishAgentUpdatedAsync(hostName, ct);
             return Results.Json(new { ok = true });
         });
 
