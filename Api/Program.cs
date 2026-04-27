@@ -282,7 +282,7 @@ app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
     var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, tag);
     var stackStateFile = StackWorkspaceManager.GetStackStateFile(deployProjectsDir, tag, stateFileName);
 
-    try
+    tryпр
     {
         if (Directory.Exists(stackDir))
         {

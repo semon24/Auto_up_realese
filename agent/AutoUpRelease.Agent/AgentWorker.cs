@@ -1,36 +1,33 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.SignalR.Client;
+using AutoUpRelease.Agent.Commands;
 
 namespace AutoUpRelease.Agent;
 
 public sealed class AgentWorker : BackgroundService
 {
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AppOptions _appOptions;
+
+    public AgentWorker(IHttpClientFactory httpClientFactory, AppOptions appOptions)
+    {
+        _httpClientFactory = httpClientFactory;
+        _appOptions = appOptions;
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var hostName = Environment.GetEnvironmentVariable("AGENT_HOST_NAME")?.Trim()
-                       ?? Environment.MachineName;
-
-        var reconnectSeconds = 5;
-        if (int.TryParse(Environment.GetEnvironmentVariable("AGENT_RECONNECT_SECONDS"), out var sec) && sec >= 1)
-            reconnectSeconds = sec;
-
-        while (!stoppingToken.IsCancellationRequested)
+        var hostName = _appOptions.AgentHostName;
+        try
         {
-            try
-            {
-                await RunSignalRSessionAsync(hostName, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[agent] ошибка: {ex.Message}");
-            }
-
-            if (!stoppingToken.IsCancellationRequested)
-                await Task.Delay(TimeSpan.FromSeconds(reconnectSeconds), stoppingToken);
+            await RunSignalRSessionAsync(hostName, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[agent] ошибка: {ex.Message}");
         }
 
         Console.WriteLine("[agent] выход");
