@@ -10,12 +10,23 @@ import {
 import { usePolling } from "../pollingContext";
 import { useAppStore } from "../store/appStore";
 import "../components/StackCard/StackCard.css";
+import type { ServiceLinks } from "../types";
+
+interface DockerComposeUpPayload {
+  running?: boolean;
+  serviceLinks?: ServiceLinks | null;
+}
+
+interface DockerComposeUpResponse {
+  ok?: boolean;
+  payload?: DockerComposeUpPayload;
+}
 
 export function AgentDetailPage() {
   const { hostName: hostNameParam } = useParams();
   const navigate = useNavigate();
-  const { status } = useAppStore();
-  const { loadStatus } = usePolling();
+  const { status, items, tagsLoading } = useAppStore();
+  const { loadStatus, loadTags } = usePolling();
 
   const hostName = useMemo(() => {
     if (!hostNameParam) return "";
@@ -32,9 +43,24 @@ export function AgentDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [launchTag, setLaunchTag] = useState("");
+  const [launching, setLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchOk, setLaunchOk] = useState<string | null>(null);
+  const [launchLinks, setLaunchLinks] = useState<ServiceLinks | null>(null);
+  const [lastStartedTag, setLastStartedTag] = useState<string | null>(null);
 
   const needsPassword = agentStatus === AGENT_STATUS_WAITING_PASSWORD;
   const isDisconnected = agentStatus === AGENT_STATUS_DISCONNECTED;
+  const runningTagFromStatus = useMemo(() => {
+    const runningStack = status.stacks.find(
+      (s) => s.running || s.operationStatus === "in_progress"
+    );
+    return runningStack?.tag ?? null;
+  }, [status.stacks]);
+  const activeTagLabel = launchError
+    ? null
+    : (runningTagFromStatus ?? lastStartedTag);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -75,6 +101,37 @@ export function AgentDetailPage() {
       setDeleteError(errMessage(err));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function onLaunch(e: FormEvent) {
+    e.preventDefault();
+    setLaunchError(null);
+    setLaunchOk(null);
+    setLaunchLinks(null);
+    if (!launchTag.trim()) {
+      setLaunchError("Введите тег для запуска");
+      return;
+    }
+    setLaunching(true);
+    try {
+      const res = await api<DockerComposeUpResponse>(
+        `/api/agents/${encodeURIComponent(hostName)}/docker-compose-up`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tag: launchTag.trim(),
+          }),
+        }
+      );
+      setLaunchOk("Команда запуска отправлена агенту.");
+      setLaunchLinks(res.payload?.serviceLinks ?? null);
+      setLastStartedTag(launchTag.trim());
+      await loadStatus();
+    } catch (err) {
+      setLaunchError(errMessage(err));
+    } finally {
+      setLaunching(false);
     }
   }
 
@@ -178,7 +235,63 @@ export function AgentDetailPage() {
       {!needsPassword &&
         !isDisconnected &&
         agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED && (
-          <p className="agent-detail__ok">Пароль принят.</p>
+          <>
+            <p className="agent-detail__ok">Пароль принят.</p>
+            <div className="agent-detail__launch-layout">
+              <form
+                className="agent-detail__form agent-detail__form--launch"
+                onSubmit={(e) => void onLaunch(e)}
+              >
+                <label className="agent-detail__label" htmlFor="agent-launch-tag">
+                  Тег образа
+                </label>
+                <input
+                  id="agent-launch-tag"
+                  list="agent-launch-tags"
+                  type="text"
+                  className="agent-detail__input"
+                  value={launchTag}
+                  onChange={(e) => setLaunchTag(e.target.value)}
+                  placeholder="Введите или выберите тег"
+                  autoComplete="off"
+                />
+                <datalist id="agent-launch-tags">
+                  {items.map((item) => (
+                    <option key={item.tag} value={item.tag} />
+                  ))}
+                </datalist>
+                <button
+                  type="button"
+                  className="agent-detail__refresh"
+                  disabled={tagsLoading || launching}
+                  onClick={() => void loadTags()}
+                >
+                  {tagsLoading ? "…" : "Обновить теги"}
+                </button>
+                <button
+                  type="submit"
+                  className="agent-detail__submit"
+                  disabled={launching}
+                >
+                  {launching ? "…" : "Поднять проект"}
+                </button>
+              </form>
+              {activeTagLabel && (
+                <button type="button" className="agent-detail__active-tag-btn">
+                  {activeTagLabel}
+                </button>
+              )}
+            </div>
+            <div className="agent-detail__launch-feedback">
+              {launchError && <p className="agent-detail__error">{launchError}</p>}
+              {launchOk && <p className="agent-detail__ok">{launchOk}</p>}
+              {launchLinks && (
+                <pre className="agent-detail__links">
+                  {JSON.stringify(launchLinks, null, 2)}
+                </pre>
+              )}
+            </div>
+          </>
         )}
     </div>
   );

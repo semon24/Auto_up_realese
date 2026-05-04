@@ -64,9 +64,14 @@
   gap: 0.65rem;
   margin-top: 0.5rem;
   padding: 1.1rem;
-  border: 1px solid #d29922;
+  border: 1px solid #ffffff;
   border-radius: 10px;
-  background: rgba(210, 153, 34, 0.12);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.agent-detail__form--launch {
+  width: min(420px, 100%);
+  margin: 0 auto;
 }
 
 .agent-detail__label {
@@ -148,4 +153,67 @@
   margin: 0;
   font-size: 0.85rem;
   color: #6e7681;
+}
+
+.agent-detail__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #c9d1d9;
+  font-size: 0.9rem;
+}
+
+.agent-detail__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.agent-detail__launch-layout {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.9rem;
+}
+
+.agent-detail__launch-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agent-detail__active-tag-btn {
+  margin-top: 1.25rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #2f81f7;
+  background: rgba(47, 129, 247, 0.2);
+  color: #c9d1d9;
+  font-weight: 600;
+  cursor: default;
+}
+
+.agent-detail__refresh {
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #e6edf3;
+  cursor: pointer;
+}
+
+.agent-detail__refresh:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.agent-detail__links {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+  background: #0d1117;
+  color: #8b949e;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

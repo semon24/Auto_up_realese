@@ -12,34 +12,22 @@ public static class DockerComposeFullCleanup
         if (!Directory.Exists(stackDir))
             return;
 
-        await TryComposeDownIfHasRunningServicesAsync(stackDir);
+        await TryComposeDownAsync(stackDir);
         await RemoveExternalResourcesAsync(stackDir);
         StackWorkspaceManager.DeleteStackWorkspace(stackDir);
     }
 
-    static async Task TryComposeDownIfHasRunningServicesAsync(string stackDir)
+    static async Task TryComposeDownAsync(string stackDir)
     {
         try
         {
-            var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
-            var hasRunningServices = servicesState.Values.Any(s =>
-                string.Equals(s.State, "running", StringComparison.OrdinalIgnoreCase));
-            if (!hasRunningServices)
-                return;
-
-            try
-            {
-                // -v + --remove-orphans: очищаем volume и orphan-контейнеры проекта compose.
-                await DockerCompose.RunAsync(stackDir, null, "down", "-v", "--remove-orphans");
-            }
-            catch (Exception cleanupEx)
-            {
-                Console.WriteLine($"[cleanup] docker compose down failed: {cleanupEx.Message}");
-            }
+            // Всегда пытаемся снять проект compose, даже если сервисы не в "running".
+            // -v + --remove-orphans: очищаем volume и orphan-контейнеры проекта compose.
+            await DockerCompose.RunAsync(stackDir, null, "down", "-v", "--remove-orphans");
         }
         catch (Exception cleanupEx)
         {
-            Console.WriteLine($"[cleanup] service state read failed: {cleanupEx.Message}");
+            Console.WriteLine($"[cleanup] docker compose down failed: {cleanupEx.Message}");
         }
     }
 

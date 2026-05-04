@@ -8,7 +8,7 @@ internal static class UpdateHarborTagsSignalRMessages
     const string ClientMethodUpdateTags = "update_tags";
     const string ServerMethodTagsUpdated = "TagsUpdated";
 
-    internal static void Register(HubConnection connection, AppOptions appOptions, IHttpClientFactory httpClientFactory)
+    internal static void Register(HubConnection connection, AppOptions appOptions)
     {
         connection.On<UpdateTagsRequest>(
             ClientMethodUpdateTags,
@@ -19,8 +19,9 @@ internal static class UpdateHarborTagsSignalRMessages
                 
                 try
                 {
+                    using var httpClient = new HttpClient();
                     var tags = await HarborTags.FetchAllAsync(
-                        httpClientFactory, 
+                        httpClient, 
                         appOptions.RegistryUrl, 
                         appOptions.RegistryUser, 
                         appOptions.RegistryPassword, 

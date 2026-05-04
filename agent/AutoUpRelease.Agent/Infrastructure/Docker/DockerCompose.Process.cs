@@ -26,6 +26,9 @@ public static partial class DockerCompose
 
     static async Task RunProcessAsync(string workingDir, string fileName, string[] args, string? stdin = null)
     {
+        if (IsDockerComposeCommand(fileName, args))
+            Console.WriteLine($"[docker] exec: {FormatCommand(fileName, args)} (cwd={workingDir})");
+
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -57,6 +60,9 @@ public static partial class DockerCompose
                 : err.Trim();
             throw new InvalidOperationException(msg);
         }
+
+        if (IsDockerComposeCommand(fileName, args))
+            Console.WriteLine($"[docker] done: {FormatCommand(fileName, args)}");
     }
 
     static async Task<(string stdout, string stderr, int exitCode)> RunProcessCaptureAsync(
@@ -64,6 +70,9 @@ public static partial class DockerCompose
         string fileName,
         params string[] args)
     {
+        if (IsDockerComposeCommand(fileName, args))
+            Console.WriteLine($"[docker] exec(capture): {FormatCommand(fileName, args)} (cwd={workingDir})");
+
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -82,6 +91,16 @@ public static partial class DockerCompose
         var stdout = await p.StandardOutput.ReadToEndAsync();
         var stderr = await p.StandardError.ReadToEndAsync();
         await p.WaitForExitAsync();
+        if (IsDockerComposeCommand(fileName, args))
+            Console.WriteLine($"[docker] done(capture): {FormatCommand(fileName, args)} exit={p.ExitCode}");
         return (stdout, stderr, p.ExitCode);
     }
+
+    static bool IsDockerComposeCommand(string fileName, string[] args) =>
+        string.Equals(fileName, DockerCli, StringComparison.OrdinalIgnoreCase) &&
+        args.Length > 0 &&
+        string.Equals(args[0], "compose", StringComparison.OrdinalIgnoreCase);
+
+    static string FormatCommand(string fileName, string[] args) =>
+        $"{fileName} {string.Join(" ", args)}";
 }

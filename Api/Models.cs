@@ -3,8 +3,7 @@ using System.Text.Json.Serialization;
 namespace AutoUpRelease.Api;
 
 public record StartBody(
-    [property: JsonPropertyName("tag")] string? Tag,
-    [property: JsonPropertyName("allocatePorts")] bool? AllocatePorts);
+    [property: JsonPropertyName("tag")] string? Tag);
 
 public record StopBody(
     [property: JsonPropertyName("tag")] string? Tag);

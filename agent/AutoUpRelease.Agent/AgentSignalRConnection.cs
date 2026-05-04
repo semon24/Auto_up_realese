@@ -1,12 +1,13 @@
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
 
 namespace AutoUpRelease.Agent;
 
 /// <summary>Сборка URI и создание SignalR-подключения к API.</summary>
 internal static class AgentSignalRConnection
 {
-    static readonly TimeSpan ClientServerTimeout = TimeSpan.FromMinutes(1);
+    static readonly TimeSpan ClientServerTimeout = TimeSpan.FromMinutes(3);
     static readonly TimeSpan ClientKeepAliveInterval = TimeSpan.FromSeconds(10);
 
     /// <summary>
@@ -18,7 +19,7 @@ internal static class AgentSignalRConnection
         var baseUri = new Uri(raw.Trim().TrimEnd('/'));
         var hubUri = BuildHubUri(baseUri, hostName);
 
-        var connection = new HubConnectionBuilder()
+        var hubBuilder = new HubConnectionBuilder()
             .WithUrl(hubUri, options =>
             {
                 options.Transports = HttpTransportType.WebSockets;
@@ -26,7 +27,16 @@ internal static class AgentSignalRConnection
                     options.Headers["ngrok-skip-browser-warning"] = "true";
             })
             .WithAutomaticReconnect()
-            .Build();
+            .ConfigureLogging(logging =>
+            {
+                logging.AddConsole();
+                // Временно отключаем шумные технические ping/transport логи SignalR.
+                logging.SetMinimumLevel(LogLevel.Information);
+                //logging.AddFilter("Microsoft.AspNetCore.SignalR.Client", LogLevel.Trace);
+                //logging.AddFilter("Microsoft.AspNetCore.Http.Connections.Client", LogLevel.Trace);
+            });
+
+        var connection = hubBuilder.Build();
 
         connection.ServerTimeout = ClientServerTimeout;
         connection.KeepAliveInterval = ClientKeepAliveInterval;

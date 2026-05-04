@@ -6,6 +6,24 @@ services:
       AGENT_HOST_NAME: ${AGENT_HOST_NAME}
       AGENT_RECONNECT_SECONDS: ${AGENT_RECONNECT_SECONDS}
       AGENT_PASSWORD_JSON_PATH: ${AGENT_PASSWORD_JSON_PATH:-/opt/agent/agent-credentials.json}
+      AGENTS_JSON_FILE_PATH: ${AGENTS_JSON_FILE_PATH}
+      PROJECT_DEPLOYMENT_PATH: ${PROJECT_DEPLOYMENT_PATH}
+      COPY_FOLDER_FOR_DEPLOY_PATH: ${COPY_FOLDER_FOR_DEPLOY_PATH}
+      STATE_PROJECT_FILE_NAME: ${STATE_PROJECT_FILE_NAME}
+      IMAGE_ENV_KEY: ${IMAGE_ENV_KEY}
+      DATABASE_PASSWORD_ENV_KEYS: ${DATABASE_PASSWORD_ENV_KEYS}
+      HARBOR_REPOSITORY: ${HARBOR_REPOSITORY}
+      REGISTRY_URL: ${REGISTRY_URL}
+      REGISTRY_USER: ${REGISTRY_USER}
+      REGISTRY_PASSWORD: ${REGISTRY_PASSWORD}
+      ServiceLinkEnvKeys__Admin: ${ServiceLinkEnvKeys__Admin}
+      ServiceLinkEnvKeys__Server: ${ServiceLinkEnvKeys__Server}
+      ServiceLinkEnvKeys__Portal: ${ServiceLinkEnvKeys__Portal}
+      ServiceLinkEnvKeys__Call: ${ServiceLinkEnvKeys__Call}
+      PortAllocation__Keys__0: ${PortAllocation__Keys__0}
+      PortAllocation__Keys__1: ${PortAllocation__Keys__1}
+      PortAllocation__ScanMin: ${PortAllocation__ScanMin}
+      PortAllocation__ScanMax: ${PortAllocation__ScanMax}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

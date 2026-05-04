@@ -20,6 +20,12 @@ public static partial class DockerCompose
             latest = await GetServicesStateAsync(composeDir, composeFiles);
             if (latest.Count == 0)
             {
+                // Fallback для сред, где `docker compose ps --format json` недоступен
+                // или возвращает неожиданный формат: проверяем готовность через
+                // сумму running + exited относительно общего числа сервисов.
+                if (await IsRunningAsync(composeDir, composeFiles))
+                    return (true, false, null, latest);
+
                 await Task.Delay(pollInterval, ct);
                 continue;
             }

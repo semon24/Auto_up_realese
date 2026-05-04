@@ -1,4 +1,5 @@
 using AutoUpRelease.Agent;
+using System.Text.RegularExpressions;
 
 namespace AutoUpRelease.Agent.Services.StartStackService;
 
@@ -26,24 +27,13 @@ public sealed partial class StartStackService
             _options.DatabasePasswordEnvKeys);
     }
 
-    private async Task<string?> AllocatePortsIfNeededAsync(
+    private async Task<string?> AllocatePortsAsync(
         StartStackContext context,
-        bool allocatePorts,
         CancellationToken ct)
     {
-        if (!allocatePorts)
-            return null;
-
-        var keys = (_options.PortAllocation?.Keys ?? new List<string>())
-            .Select(k => k.Trim())
-            .Where(k => k.Length > 0)
-            .ToList();
-
+        var keys = ResolvePortKeys(context.StackEnvFile);
         if (keys.Count == 0)
-            return "allocatePorts включен, но PortAllocation.Keys пуст";
-
-        var scanMin = _options.PortAllocation?.ScanMin ?? 1;
-        var scanMax = _options.PortAllocation?.ScanMax ?? 65535;
+            return "В .env не найдено ни одной переменной вида *_PORT или *_PORT_<N>";
 
         var allocatedPorts = await PortAllocator.AllocateAndWriteEnvAsync(
             context.DeployProjectsDir,
@@ -51,11 +41,33 @@ public sealed partial class StartStackService
             context.Tag,
             context.StackEnvFile,
             keys,
-            scanMin,
-            scanMax,
+            scanMin: 1,
+            scanMax: 65535,
             ct);
 
         await StackStateStore.SetAllocatedPortsAsync(context.StackStateFile, context.Tag, allocatedPorts);
         return null;
+    }
+
+    private static List<string> ResolvePortKeys(string stackEnvFile)
+    {
+        if (!File.Exists(stackEnvFile))
+            return new List<string>();
+
+        var envText = File.ReadAllText(stackEnvFile);
+        var matches = Regex.Matches(
+            envText,
+            @"^\s*(?<key>[A-Za-z_][A-Za-z0-9_]*_PORT(?:_[0-9]+)?)\s*=.*$",
+            RegexOptions.Multiline);
+
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in matches)
+        {
+            var key = match.Groups["key"].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(key))
+                keys.Add(key);
+        }
+
+        return keys.ToList();
     }
 }

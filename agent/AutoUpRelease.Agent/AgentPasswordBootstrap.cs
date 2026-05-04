@@ -5,9 +5,9 @@ namespace AutoUpRelease.Agent;
 
 internal static class AgentPasswordBootstrap
 {
-    public static void WritePassword()
+    public static void WritePassword(string? passwordJsonPath)
     {
-        var path = Environment.GetEnvironmentVariable("AGENT_PASSWORD_JSON_PATH")?.Trim();
+        var path = passwordJsonPath?.Trim();
         if (string.IsNullOrEmpty(path))
             return;
 
@@ -32,9 +32,9 @@ internal static class AgentPasswordBootstrap
         Console.WriteLine($"[agent] пароль записан в {fullPath}");
     }
 
-    internal static string? TryReadPassword()
+    internal static string? TryReadPassword(string? passwordJsonPath)
     {
-        var path = Environment.GetEnvironmentVariable("AGENT_PASSWORD_JSON_PATH")?.Trim();
+        var path = passwordJsonPath?.Trim();
         if (string.IsNullOrEmpty(path))
             return null;
 

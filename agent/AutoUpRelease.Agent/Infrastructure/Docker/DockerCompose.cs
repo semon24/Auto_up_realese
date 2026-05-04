@@ -6,6 +6,7 @@ namespace AutoUpRelease.Agent;
 public static partial class DockerCompose
 {
     const string DockerCli = "docker";
+    const string DockerComposeCli = DockerCli;
 
     static readonly HashSet<string> NonBlockingServices = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -29,7 +30,7 @@ public static partial class DockerCompose
     public static async Task RunAsync(string composeDir, IReadOnlyList<string>? composeFiles = null, params string[] args)
     {
         var all = BuildComposeArgs(composeFiles, args);
-        await RunProcessAsync(composeDir, DockerCli, all.ToArray());
+        await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray());
     }
 
     public static async Task<bool> IsRunningAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
@@ -37,7 +38,7 @@ public static partial class DockerCompose
         try
         {
             var allServicesArgs = BuildComposeArgs(composeFiles, "config", "--services");
-            var (allServicesOut, _, allExit) = await RunProcessCaptureAsync(composeDir, DockerCli, allServicesArgs.ToArray());
+            var (allServicesOut, _, allExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, allServicesArgs.ToArray());
 
             if (allExit != 0)
                 return false;
@@ -51,16 +52,24 @@ public static partial class DockerCompose
                 return false;
 
             var runningArgs = BuildComposeArgs(composeFiles, "ps", "--status", "running", "--services");
-            var (runningOut, _, runningExit) = await RunProcessCaptureAsync(composeDir, DockerCli, runningArgs.ToArray());
+            var (runningOut, _, runningExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, runningArgs.ToArray());
+            var exitedArgs = BuildComposeArgs(composeFiles, "ps", "--status", "exited", "--services");
+            var (exitedOut, _, exitedExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, exitedArgs.ToArray());
 
-            if (runningExit != 0)
+            if (runningExit != 0 || exitedExit != 0)
                 return false;
 
             var runningServices = runningOut
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(allServices.Contains)
                 .ToHashSet(StringComparer.Ordinal);
 
-            return allServices.All(runningServices.Contains);
+            var exitedServices = exitedOut
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(allServices.Contains)
+                .ToHashSet(StringComparer.Ordinal);
+
+            return runningServices.Count + exitedServices.Count == allServices.Count;
         }
         catch
         {
@@ -75,7 +84,7 @@ public static partial class DockerCompose
         try
         {
             var psArgs = BuildComposeArgs(composeFiles, "ps", "--all", "--format", "json");
-            var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerCli, psArgs.ToArray());
+            var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, psArgs.ToArray());
 
             if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
                 return result;

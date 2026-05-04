@@ -1,18 +1,20 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
 using AutoUpRelease.Agent.Commands;
+using AutoUpRelease.Agent.Services.StartStackService;
 
 namespace AutoUpRelease.Agent;
 
 public sealed class AgentWorker : BackgroundService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly AppOptions _appOptions;
+    private readonly StartStackService _startStackService;
 
-    public AgentWorker(IHttpClientFactory httpClientFactory, AppOptions appOptions)
+    public AgentWorker(IOptions<AppOptions> appOptions, StartStackService startStackService)
     {
-        _httpClientFactory = httpClientFactory;
-        _appOptions = appOptions;
+        _appOptions = appOptions.Value;
+        _startStackService = startStackService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -33,7 +35,7 @@ public sealed class AgentWorker : BackgroundService
         Console.WriteLine("[agent] выход");
     }
 
-    static async Task RunSignalRSessionAsync(string hostName, CancellationToken stoppingToken)
+    async Task RunSignalRSessionAsync(string hostName, CancellationToken stoppingToken)
     {
         var connection = AgentSignalRConnection.Create(hostName);
         var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -62,7 +64,8 @@ public sealed class AgentWorker : BackgroundService
             return Task.CompletedTask;
         };
 
-        AgentSignalRPasswordMessages.Register(connection);
+        AgentSignalRPasswordMessages.Register(connection, _appOptions);
+        DockerComposeUpSignalRMessages.Register(connection, _startStackService);
         try
         {
             await connection.StartAsync(stoppingToken);

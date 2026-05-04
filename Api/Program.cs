@@ -79,7 +79,7 @@ builder.Services.AddSingleton<AgentHubPublisher>();
 builder.Services.AddSignalR(options =>
 {
     options.KeepAliveInterval = TimeSpan.FromSeconds(10);
-    options.ClientTimeoutInterval = TimeSpan.FromMinutes(1);
+    options.ClientTimeoutInterval = TimeSpan.FromMinutes(3);
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -268,91 +268,6 @@ app.MapPost("/api/allocate-ports", async (CancellationToken ct) =>
     }
     catch (Exception e)
     {
-        return Results.Json(new { error = e.Message }, statusCode: 500);
-    }
-});
-
-app.MapPost("/api/start", async (StartBody? body, CancellationToken ct) =>
-{
-    var tag = body?.Tag?.Trim();
-    if (string.IsNullOrEmpty(tag))
-        return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
-
-    var stackDir = StackWorkspaceManager.GetStackDir(deployProjectsDir, tag);
-    var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, tag);
-    var stackStateFile = StackWorkspaceManager.GetStackStateFile(deployProjectsDir, tag, stateFileName);
-
-    tryпр
-    {
-        if (Directory.Exists(stackDir))
-        {
-            var existingInfo = await StackStateStore.GetStackRuntimeInfoAsync(stackStateFile, tag);
-            if (existingInfo.Running || string.Equals(existingInfo.OperationStatus, "in_progress", StringComparison.OrdinalIgnoreCase))
-                return Results.Json(new { error = $"Сервис с тегом '{tag}' уже запущен или запускается" }, statusCode: 409);
-        }
-
-        await DockerCompose.LoginAsync(registryUrl, registryUser, registryPassword);
-
-        StackWorkspaceManager.EnsureStackWorkspace(folderForCopyDir, stackDir);
-        if (!File.Exists(stackStateFile))
-            await File.WriteAllTextAsync(stackStateFile, "{}");
-        await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "in_progress");
-        await DockerCompose.EnsureVersionedResourcesAsync(
-            tag,
-            stackDir,
-            stackEnvFile,
-            imageEnvKey,
-            postgresPasswordEnvKey);
-
-        if (body?.AllocatePorts != false)
-        {
-            var keys = portAllocationOptions.Keys
-                .Select(k => k.Trim())
-                .Where(k => k.Length > 0)
-                .ToList();
-            if (keys.Count == 0)
-                return Results.Json(new { error = "allocatePorts включен, но PortAllocation.Keys пуст" }, statusCode: 400);
-            var allocatedPorts = await PortAllocator.AllocateAndWriteEnvAsync(
-                deployProjectsDir,
-                stateFileName,
-                tag,
-                stackEnvFile,
-                keys,
-                portAllocationOptions.ScanMin,
-                portAllocationOptions.ScanMax,
-                ct);
-            await StackStateStore.SetAllocatedPortsAsync(stackStateFile, tag, allocatedPorts);
-        }
-
-        await EnvFile.WriteTagAsync(stackEnvFile, imageEnvKey, tag);
-        await DockerCompose.RunAsync(stackDir, null, "up", "-d");
-        var waitResult = await DockerCompose.WaitForServicesReadyAsync(
-            stackDir,
-            timeout: TimeSpan.FromSeconds(600),
-            pollInterval: TimeSpan.FromSeconds(2),
-            ct);
-        if (!waitResult.IsReady)
-        {
-            var startFailedMessage = waitResult.HasFailure
-                ? $"Не удалось успешно запустить стек: {waitResult.Reason}"
-                : "Не удалось успешно запустить стек: сервисы не достигли состояния running/exited за отведенное время";
-            await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "deleting", error: startFailedMessage);
-            await DockerComposeFullCleanup.CleanupStackAsync(stackDir);
-            return Results.Json(new { error = startFailedMessage }, statusCode: 500);
-        }
-
-        var servicesState = waitResult.ServicesState;
-        var startStackName = tag;
-        await StackStateStore.SaveStackServicesStateAsync(stackStateFile, startStackName, servicesState);
-        await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "success");
-        var running = true;
-        var serviceLinks = DeployEnvLinks.TryRead(stackEnvFile, serviceLinkEnvKeys);
-        return Results.Json(new { ok = true, running, serviceLinks });
-    }
-    catch (Exception e)
-    {
-        await StackStateStore.SetOperationAsync(stackStateFile, tag, operationType: "start", operationStatus: "deleting", error: e.Message);
-        await DockerComposeFullCleanup.CleanupStackAsync(stackDir);
         return Results.Json(new { error = e.Message }, statusCode: 500);
     }
 });

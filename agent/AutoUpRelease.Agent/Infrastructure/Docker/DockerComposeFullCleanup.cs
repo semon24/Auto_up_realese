@@ -6,41 +6,103 @@ namespace AutoUpRelease.Agent;
 public static class DockerComposeFullCleanup
 {
     const string DockerCli = "docker";
+    const string DockerComposeCli = DockerCli;
 
     public static async Task CleanupStackAsync(string stackDir)
     {
         if (!Directory.Exists(stackDir))
+        {
+            Console.WriteLine($"[cleanup] каталог стека отсутствует, пропуск: {stackDir}");
             return;
+        }
 
-        await TryComposeDownIfHasRunningServicesAsync(stackDir);
+        Console.WriteLine($"[cleanup] начало очистки стека: {stackDir}");
+
+        // Всегда пытаемся снять проект compose, даже если up оборвался на полпути или нет «running».
+        // -v: именованные volumes из compose; --remove-orphans: висящие контейнеры.
+        await TryComposeDownAsync(stackDir);
+        await RemoveComposeResourcesAsync(stackDir);
         await RemoveExternalResourcesAsync(stackDir);
+
+        Console.WriteLine($"[cleanup] удаление рабочей папки стека: {stackDir}");
         StackWorkspaceManager.DeleteStackWorkspace(stackDir);
+        Console.WriteLine($"[cleanup] очистка стека завершена: {stackDir}");
     }
 
-    static async Task TryComposeDownIfHasRunningServicesAsync(string stackDir)
+    static async Task TryComposeDownAsync(string stackDir)
     {
+        Console.WriteLine(
+            $"[cleanup] docker compose down -v --remove-orphans (тома проекта compose удаляются ключом -v)");
+
         try
         {
-            var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
-            var hasRunningServices = servicesState.Values.Any(s =>
-                string.Equals(s.State, "running", StringComparison.OrdinalIgnoreCase));
-            if (!hasRunningServices)
-                return;
-
-            try
-            {
-                // -v + --remove-orphans: очищаем volume и orphan-контейнеры проекта compose.
-                await DockerCompose.RunAsync(stackDir, null, "down", "-v", "--remove-orphans");
-            }
-            catch (Exception cleanupEx)
-            {
-                Console.WriteLine($"[cleanup] docker compose down failed: {cleanupEx.Message}");
-            }
+            await DockerCompose.RunAsync(stackDir, null, "down", "-v", "--remove-orphans");
+            Console.WriteLine($"[cleanup] docker compose down выполнен успешно");
         }
         catch (Exception cleanupEx)
         {
-            Console.WriteLine($"[cleanup] service state read failed: {cleanupEx.Message}");
+            Console.WriteLine($"[cleanup] docker compose down failed: {cleanupEx.Message}");
         }
+    }
+
+    static async Task RemoveComposeResourcesAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
+    {
+        try
+        {
+            var volumes = await GetComposeResourcesByKindAsync(composeDir, "volumes", composeFiles);
+            var networks = await GetComposeResourcesByKindAsync(composeDir, "networks", composeFiles);
+
+            Console.WriteLine(
+                $"[cleanup] ресурсы из docker compose config: volumes={volumes.Count}, networks={networks.Count}");
+
+            foreach (var volume in volumes.OrderBy(v => v, StringComparer.Ordinal))
+                await TryRemoveVolumeAsync(volume);
+
+            foreach (var network in networks.OrderBy(n => n, StringComparer.Ordinal))
+                await TryRemoveNetworkAsync(network);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[cleanup] ошибка при удалении ресурсов compose config: {ex.Message}");
+        }
+    }
+
+    static async Task<HashSet<string>> GetComposeResourcesByKindAsync(
+        string composeDir,
+        string kind,
+        IReadOnlyList<string>? composeFiles)
+    {
+        var resources = new HashSet<string>(StringComparer.Ordinal);
+
+        var args = new List<string> { "compose" };
+        if (composeFiles != null)
+        {
+            foreach (var file in composeFiles)
+            {
+                if (string.IsNullOrWhiteSpace(file))
+                    continue;
+
+                args.Add("-f");
+                args.Add(file);
+            }
+        }
+        args.Add("config");
+        args.Add($"--{kind}");
+
+        var (stdout, stderr, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, args.ToArray());
+        if (exit != 0)
+        {
+            Console.WriteLine($"[cleanup] docker compose config --{kind} failed: {stderr.Trim()}");
+            return resources;
+        }
+
+        foreach (var raw in stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!string.IsNullOrWhiteSpace(raw))
+                resources.Add(raw.Trim());
+        }
+
+        return resources;
     }
 
     static async Task RemoveExternalResourcesAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
@@ -49,15 +111,21 @@ public static class DockerComposeFullCleanup
         {
             var resources = await GetExternalResourceNamesAsync(composeDir, composeFiles);
 
-            foreach (var volume in resources.Volumes)
+            var volList = resources.Volumes.OrderBy(v => v, StringComparer.Ordinal).ToList();
+            var netList = resources.Networks.OrderBy(n => n, StringComparer.Ordinal).ToList();
+
+            Console.WriteLine(
+                $"[cleanup] внешние ресурсы из compose (external): volumes={volList.Count}, networks={netList.Count}");
+
+            foreach (var volume in volList)
                 await TryRemoveVolumeAsync(volume);
 
-            foreach (var network in resources.Networks)
+            foreach (var network in netList)
                 await TryRemoveNetworkAsync(network);
         }
-        catch
+        catch (Exception ex)
         {
-            // Cleanup path should be best-effort: ignore parse/runtime failures.
+            Console.WriteLine($"[cleanup] ошибка при удалении внешних ресурсов: {ex.Message}");
         }
     }
 
@@ -84,7 +152,7 @@ public static class DockerComposeFullCleanup
         args.Add("--format");
         args.Add("json");
 
-        var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerCli, args.ToArray());
+        var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, args.ToArray());
         if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
             return (volumes, networks);
 
@@ -145,10 +213,17 @@ public static class DockerComposeFullCleanup
         if (string.IsNullOrWhiteSpace(volumeName))
             return;
 
-        await RunProcessCaptureAsync(
+        Console.WriteLine($"[cleanup] docker volume rm \"{volumeName}\"");
+
+        var (_, stderr, exit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
             "volume", "rm", volumeName);
+
+        if (exit == 0)
+            Console.WriteLine($"[cleanup] volume удалён: {volumeName}");
+        else
+            Console.WriteLine($"[cleanup] volume rm не удалось (code={exit}): {volumeName} — {stderr.Trim()}");
     }
 
     static async Task TryRemoveNetworkAsync(string networkName)
@@ -156,10 +231,17 @@ public static class DockerComposeFullCleanup
         if (string.IsNullOrWhiteSpace(networkName))
             return;
 
-        await RunProcessCaptureAsync(
+        Console.WriteLine($"[cleanup] docker network rm \"{networkName}\"");
+
+        var (_, stderr, exit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
             "network", "rm", networkName);
+
+        if (exit == 0)
+            Console.WriteLine($"[cleanup] network удалена: {networkName}");
+        else
+            Console.WriteLine($"[cleanup] network rm не удалось (code={exit}): {networkName} — {stderr.Trim()}");
     }
 
     static async Task<(string stdout, string stderr, int exitCode)> RunProcessCaptureAsync(

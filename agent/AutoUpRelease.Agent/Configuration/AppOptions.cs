@@ -13,6 +13,9 @@ public sealed class AppOptions
     [ConfigurationKeyName("AGENT_RECONNECT_SECONDS")]
     public string AgentReconnectSeconds { get; set; }
 
+    [ConfigurationKeyName("AGENT_PASSWORD_JSON_PATH")]
+    public string AgentPasswordJsonPath { get; set; }
+
     [ConfigurationKeyName("AGENTS_JSON_FILE_PATH")]
     public string AgentsJsonFilePath { get; set; }
 

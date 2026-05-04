@@ -6,7 +6,7 @@ namespace AutoUpRelease.Agent.Integrations.Harbor;
 public static class HarborTags
 {
     public static async Task<List<TagItem>> FetchAllAsync(
-        IHttpClientFactory httpFactory,
+        HttpClient client,
         string registryUrl,
         string username,
         string password,
@@ -27,7 +27,6 @@ public static class HarborTags
         }
 
         var repo = repository.Trim().Trim('/');
-        var client = httpFactory.CreateClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("AutoUpRelease/1.0");
 
         var tokenUrl =

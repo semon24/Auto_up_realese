@@ -32,4 +32,11 @@ public sealed class AgentTransportHub(AgentSessionStore sessions) : Hub
         sessions.HandlePasswordVerified(Context.ConnectionId, id, ok);
         return Task.CompletedTask;
     }
+
+    /// <summary>Результат выполнения команды docker compose up на агенте.</summary>
+    public Task DockerComposeUpCompleted(string id, bool ok, string? error, object? payload)
+    {
+        sessions.HandleDockerComposeUpCompleted(Context.ConnectionId, id, ok, error, payload);
+        return Task.CompletedTask;
+    }
 }
