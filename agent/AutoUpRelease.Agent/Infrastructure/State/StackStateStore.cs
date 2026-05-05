@@ -34,7 +34,8 @@ public static class StackStateStore
                     kv => new DockerServiceState(kv.Value.State, kv.Value.Health),
                     StringComparer.Ordinal),
                 Operation = existingEntry?.Operation,
-                Ports = existingEntry?.Ports ?? new Dictionary<string, int>(StringComparer.Ordinal)
+                Ports = existingEntry?.Ports ?? new Dictionary<string, int>(StringComparer.Ordinal),
+                ServiceLinks = existingEntry?.ServiceLinks
             };
 
             await WriteModelAsync(stateFilePath, model);
@@ -99,6 +100,33 @@ public static class StackStateStore
                 entry = new StackEntry();
 
             entry.Ports = ports.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task SetServiceLinksAsync(
+        string stateFilePath,
+        string stackName,
+        DeployServiceLinks? serviceLinks)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            entry.ServiceLinks = serviceLinks;
             model.Stack[stackName] = entry;
             await WriteModelAsync(stateFilePath, model);
         }
@@ -250,6 +278,7 @@ public static class StackStateStore
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
         public StackOperation? Operation { get; set; }
         public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);
+        public DeployServiceLinks? ServiceLinks { get; set; }
     }
 
     sealed class StackOperation
@@ -259,4 +288,5 @@ public static class StackStateStore
         public string? Error { get; set; }
         public DateTimeOffset UpdatedAtUtc { get; set; }
     }
+
 }

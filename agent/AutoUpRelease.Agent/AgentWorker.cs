@@ -8,6 +8,8 @@ namespace AutoUpRelease.Agent;
 
 public sealed class AgentWorker : BackgroundService
 {
+    static readonly TimeSpan AggregationInterval = TimeSpan.FromSeconds(10);
+
     private readonly AppOptions _appOptions;
     private readonly StartStackService _startStackService;
 
@@ -39,6 +41,8 @@ public sealed class AgentWorker : BackgroundService
     {
         var connection = AgentSignalRConnection.Create(hostName);
         var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var aggregationCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        Task? aggregationTask = null;
 
         connection.Reconnecting += ex =>
         {
@@ -70,10 +74,23 @@ public sealed class AgentWorker : BackgroundService
         {
             await connection.StartAsync(stoppingToken);
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] SignalR подключено: {hostName}");
+            aggregationTask = RunAggregatedAgentsStateLoopAsync(connection, aggregationCts.Token);
             await disconnectedTcs.Task.WaitAsync(stoppingToken);
         }
         finally
         {
+            aggregationCts.Cancel();
+            if (aggregationTask is not null)
+            {
+                try
+                {
+                    await aggregationTask;
+                }
+                catch (OperationCanceledException) when (aggregationCts.IsCancellationRequested)
+                {
+                }
+            }
+
             try
             {
                 await connection.DisposeAsync();
@@ -82,5 +99,89 @@ public sealed class AgentWorker : BackgroundService
             {
             }
         }
+    }
+
+    async Task RunAggregatedAgentsStateLoopAsync(HubConnection connection, CancellationToken cancellationToken)
+    {
+        Console.WriteLine(
+            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] запуск цикла агрегации state-файла: интервал={AggregationInterval.TotalSeconds:0}с, output={_appOptions.AgentsJsonFilePath.Trim()}");
+        await BuildAggregatedAgentsStateSafeAsync(connection, cancellationToken);
+        using var timer = new PeriodicTimer(AggregationInterval);
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+            await BuildAggregatedAgentsStateSafeAsync(connection, cancellationToken);
+    }
+
+    async Task BuildAggregatedAgentsStateSafeAsync(HubConnection connection, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var linksUpdated = await RefreshServiceLinksInProjectStatesAsync(cancellationToken);
+            var stacksCount = await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
+                _appOptions.ProjectDeploymentPath.Trim(),
+                _appOptions.StateProjectFileName.Trim(),
+                _appOptions.AgentsJsonFilePath.Trim(),
+                _appOptions.AgentHostName,
+                _appOptions.ServiceLinkEnvKeys);
+            Console.WriteLine(
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] агрегированный state-файл обновлен: stacks={stacksCount}, linksUpdated={linksUpdated}, output={_appOptions.AgentsJsonFilePath.Trim()}");
+
+            try
+            {
+                await AgentServicesSnapshotSignalRMessages.SendFromFileAsync(
+                    connection,
+                    _appOptions.AgentsJsonFilePath.Trim(),
+                    cancellationToken);
+                Console.WriteLine(
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] snapshot отправлен на сервер: stacks={stacksCount}");
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] не удалось отправить snapshot на сервер: {ex.Message}");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] не удалось собрать агрегированный state-файл: {ex.Message}");
+        }
+    }
+
+    async Task<int> RefreshServiceLinksInProjectStatesAsync(CancellationToken cancellationToken)
+    {
+        var deployDir = _appOptions.ProjectDeploymentPath.Trim();
+        var stateFileName = _appOptions.StateProjectFileName.Trim();
+        if (!Directory.Exists(deployDir))
+            return 0;
+
+        var updated = 0;
+        foreach (var stackDir in Directory.GetDirectories(deployDir))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var stackStateFile = Path.Combine(stackDir, stateFileName);
+            if (!File.Exists(stackStateFile))
+                continue;
+
+            var stackNames = await StackStateStore.GetStackNamesAsync(stackStateFile);
+            if (stackNames.Count == 0)
+                stackNames.Add(Path.GetFileName(stackDir));
+            foreach (var stackName in stackNames)
+            {
+                var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployDir, stackName);
+                var links = DeployEnvLinks.TryRead(stackEnvFile, _appOptions.ServiceLinkEnvKeys);
+                await StackStateStore.SetServiceLinksAsync(stackStateFile, stackName, links);
+                updated++;
+            }
+        }
+
+        return updated;
     }
 }

@@ -16,6 +16,7 @@ function AppShell() {
         <Routes>
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/:hostName" element={<AgentDetailPage />} />
+          <Route path="/agents/:hostName/:tag" element={<AgentDetailPage />} />
           <Route path="/" element={<Navigate to="/agents" replace />} />
           <Route path="*" element={<Navigate to="/agents" replace />} />
         </Routes>
@@ -46,6 +47,7 @@ function AppShell() {
             <Route path="/" element={<MainPage />} />
             <Route path="/agents" element={<AgentsPage />} />
             <Route path="/agents/:hostName" element={<AgentDetailPage />} />
+            <Route path="/agents/:hostName/:tag" element={<AgentDetailPage />} />
           </Routes>
         </div>
       </div>

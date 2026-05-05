@@ -74,6 +74,7 @@ builder.Services.AddSingleton(sp =>
     var o = sp.GetRequiredService<ResolvedAppOptions>();
     return new AgentsJsonFile(o.AgentsJsonPath);
 });
+builder.Services.AddSingleton<AgentServicesSnapshotStore>();
 builder.Services.AddSingleton<AgentSessionStore>();
 builder.Services.AddSingleton<AgentHubPublisher>();
 builder.Services.AddSignalR(options =>
@@ -146,10 +147,12 @@ app.MapGet("/api/tags", async (IHttpClientFactory httpFactory) =>
     }
 });
 
-app.MapGet("/api/status", async (AgentsJsonFile agentsStatusJsonFile) =>
+app.MapGet("/api/status", async (AgentsJsonFile agentsStatusJsonFile, AgentServicesSnapshotStore snapshotsStore) =>
 {
     try
     {
+        var freshSnapshots = snapshotsStore.GetFreshStacks(TimeSpan.FromSeconds(35));
+
         var rawStackDirs = Directory.GetDirectories(deployProjectsDir)
             .Where(d => File.Exists(Path.Combine(d, stateFileName)))
             .ToList();
@@ -190,30 +193,72 @@ app.MapGet("/api/status", async (AgentsJsonFile agentsStatusJsonFile) =>
         //Console.WriteLine($"[status] running={running}");
 
         var stacks = new List<object>(stackDirs.Count);
+        var includedTags = new HashSet<string>(StringComparer.Ordinal);
+        var runningFromSnapshot = false;
         foreach (var stackDir in stackDirs)
         {
             var stackName = Path.GetFileName(stackDir);
+            includedTags.Add(stackName);
             var stackStateFile = Path.Combine(stackDir, stateFileName);
             var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, stackName);
-            var servicesState = await DockerCompose.GetServicesStateAsync(stackDir);
             var info = await StackStateStore.GetStackRuntimeInfoAsync(stackStateFile, stackName);
             var stackServiceLinks = File.Exists(stackEnvFile)
                 ? DeployEnvLinks.TryRead(stackEnvFile, serviceLinkEnvKeys)
                 : null;
+
+            var hasSnapshot = freshSnapshots.TryGetValue(stackName, out var snapshot);
+            var runningValue = hasSnapshot ? snapshot!.Running : info.Running;
+            if (runningValue)
+                runningFromSnapshot = true;
+            var operationTypeValue = hasSnapshot ? snapshot!.OperationType ?? info.OperationType : info.OperationType;
+            var operationStatusValue = hasSnapshot ? snapshot!.OperationStatus ?? info.OperationStatus : info.OperationStatus;
+            var operationErrorValue = hasSnapshot ? snapshot!.OperationError ?? info.OperationError : info.OperationError;
+            object? serviceLinksValue = hasSnapshot
+                ? snapshot!.ServiceLinks
+                : null;
+            var servicesSnapshot = hasSnapshot
+                ? snapshot!.Services
+                : await DockerCompose.GetServicesStateAsync(stackDir);
+
             stacks.Add(new
             {
                 tag = stackName,
-                running = info.Running,
-                operationType = info.OperationType,
-                operationStatus = info.OperationStatus,
-                operationError = info.OperationError,
-                serviceLinks = stackServiceLinks,
-                services = servicesState.ToDictionary(
+                running = runningValue,
+                operationType = operationTypeValue,
+                operationStatus = operationStatusValue,
+                operationError = operationErrorValue,
+                serviceLinks = serviceLinksValue,
+                services = servicesSnapshot.ToDictionary(
                     kv => kv.Key,
                     kv => new { state = kv.Value.State, health = kv.Value.Health },
                     StringComparer.Ordinal)
             });
         }
+
+        foreach (var snapshotEntry in freshSnapshots)
+        {
+            if (includedTags.Contains(snapshotEntry.Key))
+                continue;
+            if (snapshotEntry.Value.Running)
+                runningFromSnapshot = true;
+
+            stacks.Add(new
+            {
+                tag = snapshotEntry.Key,
+                running = snapshotEntry.Value.Running,
+                operationType = snapshotEntry.Value.OperationType,
+                operationStatus = snapshotEntry.Value.OperationStatus,
+                operationError = snapshotEntry.Value.OperationError,
+                serviceLinks = snapshotEntry.Value.ServiceLinks,
+                services = snapshotEntry.Value.Services.ToDictionary(
+                    kv => kv.Key,
+                    kv => new { state = kv.Value.State, health = kv.Value.Health },
+                    StringComparer.Ordinal)
+            });
+        }
+
+        if (!running)
+            running = runningFromSnapshot;
 
         return Results.Json(new { running, stacks, agents = agentsStatusJsonFile.ReadSnapshot() });
     }
