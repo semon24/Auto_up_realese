@@ -1,4 +1,3 @@
-export const TAGS_POLL_MS = 5 * 60 * 1000;
 export const STATUS_POLL_MS = 8000;
 
 /** Как на сервере AgentsJsonFile.StatusWaitingForPassword */

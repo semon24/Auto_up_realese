@@ -70,6 +70,7 @@ public sealed class AgentWorker : BackgroundService
 
         AgentSignalRPasswordMessages.Register(connection, _appOptions);
         DockerComposeUpSignalRMessages.Register(connection, _startStackService);
+        UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
         try
         {
             await connection.StartAsync(stoppingToken);

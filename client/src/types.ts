@@ -24,6 +24,14 @@ export interface AgentUpdatedEvent {
   status?: string | null;
 }
 
+export interface StatusUpdatedEvent {
+  hostName?: string;
+  stacksCount?: number;
+  snapshot?: unknown;
+}
+
+export type RuntimeSnapshotByHost = Record<string, StackRuntimeItem[]>;
+
 export interface RuntimeServiceState {
   state: string;
   health?: string | null;

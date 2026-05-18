@@ -9,15 +9,17 @@ import { useOutsideClick } from "../hooks/useOutsideClick";
 import { usePolling } from "../pollingContext";
 import { dispatchApp, useAppStore } from "../store/appStore";
 import { formatErrorForUi } from "../utils/formatErrorForUi";
+import { AGENT_STATUS_PASSWORD_ACCEPTED } from "../constants";
 import "./MainPage.css";
 
 const MAX_ERROR_CHARS = 700;
 
 export function MainPage() {
   const {
-    items,
-    tagsError,
-    tagsLoading,
+    tagsByHost,
+    tagsLoadingHost,
+    tagsErrorByHost,
+    tagsClientError,
     status,
     selectedTagView,
     query,
@@ -28,6 +30,31 @@ export function MainPage() {
   const [pendingStartTags, setPendingStartTags] = useState<string[]>([]);
   const [pendingStopTags, setPendingStopTags] = useState<string[]>([]);
   const { loadTags, loadStatus } = usePolling();
+
+  const acceptableHostsForTags = useMemo(
+    () =>
+      Object.entries(status.agents)
+        .filter(([, st]) => st === AGENT_STATUS_PASSWORD_ACCEPTED)
+        .map(([hostName]) => hostName.trim())
+        .filter((hostName) => hostName.length > 0)
+        .sort(),
+    [status.agents]
+  );
+
+  const singleTagsHost =
+    acceptableHostsForTags.length === 1 ? acceptableHostsForTags[0] : null;
+
+  const items = singleTagsHost
+    ? tagsByHost[singleTagsHost] ?? []
+    : [];
+
+  const tagsError =
+    tagsClientError ??
+    (singleTagsHost ? tagsErrorByHost[singleTagsHost] : null);
+
+  const tagsLoading = Boolean(
+    singleTagsHost && tagsLoadingHost === singleTagsHost
+  );
 
   const closeTagPicker = useCallback(() => {
     dispatchApp({ type: "OPEN_SET", open: false });
@@ -180,8 +207,21 @@ export function MainPage() {
         <button
           type="button"
           className="btn btn--refresh"
-          disabled={tagsLoading}
-          onClick={() => void loadTags()}
+          disabled={tagsLoading || !singleTagsHost}
+          onClick={() => {
+            if (!singleTagsHost) {
+              dispatchApp({
+                type: "TAGS_FAILURE",
+                hostName: "",
+                error:
+                  acceptableHostsForTags.length === 0
+                    ? "Нет агента с принятым паролем — теги не к кому запросить."
+                    : "Несколько агентов подключены. Откройте карточку нужного хоста и нажмите «Обновить теги» там.",
+              });
+              return;
+            }
+            void loadTags(singleTagsHost);
+          }}
         >
           {tagsLoading ? "…" : "Обновить список тегов"}
         </button>

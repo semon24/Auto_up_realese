@@ -1,12 +1,22 @@
-import type { StackRuntimeItem, TagItem } from "./types";
+import {
+  flattenStacksByHost,
+  isAnyStackRunning,
+} from "./utils/runtimeStatus";
+import type { RuntimeSnapshotByHost, StackRuntimeItem, TagItem } from "./types";
 
 export interface AppState {
-  items: TagItem[];
-  tagsError: string | null;
-  tagsLoading: boolean;
+  /** Harbor-теги, полученные через конкретного агента (ключ — имя хоста). */
+  tagsByHost: Record<string, TagItem[]>;
+  /** Нормализованное имя хоста, для которого сейчас идёт загрузка тегов, если есть. */
+  tagsLoadingHost: string | null;
+  /** Ошибки запроса тегов по хосту. */
+  tagsErrorByHost: Record<string, string>;
+  /** Сообщение вне привязки к агенту (например, «нужен один агент» на MainPage). */
+  tagsClientError: string | null;
   status: {
     running: boolean;
     stacks: StackRuntimeItem[];
+    stacksByHost: RuntimeSnapshotByHost;
     agents: Record<string, string>;
   };
   selectedTagView: string | null;
@@ -17,10 +27,11 @@ export interface AppState {
 }
 
 export const initialAppState: AppState = {
-  items: [],
-  tagsError: null,
-  tagsLoading: false,
-  status: { running: false, stacks: [], agents: {} },
+  tagsByHost: {},
+  tagsLoadingHost: null,
+  tagsErrorByHost: {},
+  tagsClientError: null,
+  status: { running: false, stacks: [], stacksByHost: {}, agents: {} },
   selectedTagView: null,
   query: "",
   open: false,
@@ -29,15 +40,20 @@ export const initialAppState: AppState = {
 };
 
 export type AppAction =
-  | { type: "TAGS_REQUEST" }
-  | { type: "TAGS_SUCCESS"; items: TagItem[] }
-  | { type: "TAGS_FAILURE"; error: string }
+  | { type: "TAGS_REQUEST"; hostName: string }
+  | { type: "TAGS_SUCCESS"; hostName: string; items: TagItem[] }
+  /** hostName пустой — положить текст в tagsClientError (валидация UI). */
+  | { type: "TAGS_FAILURE"; hostName: string; error: string }
   | {
       type: "STATUS_SUCCESS";
       running: boolean;
       stacks?: StackRuntimeItem[];
+      stacksByHost?: RuntimeSnapshotByHost;
       agents?: Record<string, string>;
     }
+  | { type: "RUNTIME_HOST_UPDATED"; hostName: string; stacks: StackRuntimeItem[] }
+  | { type: "RUNTIME_HOST_CLEARED"; hostName: string }
+  | { type: "RUNTIME_SNAPSHOT_BY_HOST"; stacksByHost: RuntimeSnapshotByHost }
   | { type: "AGENTS_SNAPSHOT"; agents: Record<string, string> }
   | { type: "AGENT_UPDATED"; hostName: string; status: string | null }
   | { type: "QUERY_CHANGE"; query: string }
@@ -49,26 +65,93 @@ export type AppAction =
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case "TAGS_REQUEST":
-      return { ...state, tagsError: null, tagsLoading: true };
+    case "TAGS_REQUEST": {
+      const trimmed = action.hostName.trim();
+      const nextErrByHost = { ...state.tagsErrorByHost };
+      if (trimmed) delete nextErrByHost[trimmed];
+      return {
+        ...state,
+        tagsLoadingHost: trimmed,
+        tagsClientError: null,
+        tagsErrorByHost: nextErrByHost,
+      };
+    }
     case "TAGS_SUCCESS":
       return {
         ...state,
-        items: action.items,
-        tagsError: null,
-        tagsLoading: false,
+        tagsByHost: { ...state.tagsByHost, [action.hostName.trim()]: action.items },
+        tagsLoadingHost: null,
       };
-    case "TAGS_FAILURE":
-      return { ...state, tagsError: action.error, tagsLoading: false };
-    case "STATUS_SUCCESS":
+    case "TAGS_FAILURE": {
+      const trimmed = action.hostName.trim();
+      if (!trimmed) {
+        return {
+          ...state,
+          tagsLoadingHost: null,
+          tagsClientError: action.error,
+        };
+      }
+      return {
+        ...state,
+        tagsLoadingHost: null,
+        tagsErrorByHost: { ...state.tagsErrorByHost, [trimmed]: action.error },
+      };
+    }
+    case "STATUS_SUCCESS": {
+      const stacksByHost = action.stacksByHost ?? state.status.stacksByHost;
+      const stacks = action.stacks ?? flattenStacksByHost(stacksByHost);
       return {
         ...state,
         status: {
           running: action.running,
-          stacks: action.stacks ?? [],
+          stacks,
+          stacksByHost,
           agents: action.agents ?? state.status.agents,
         },
       };
+    }
+    case "RUNTIME_SNAPSHOT_BY_HOST": {
+      const stacks = flattenStacksByHost(action.stacksByHost);
+      return {
+        ...state,
+        status: {
+          ...state.status,
+          stacksByHost: action.stacksByHost,
+          stacks,
+          running: isAnyStackRunning(stacks),
+        },
+      };
+    }
+    case "RUNTIME_HOST_UPDATED": {
+      const stacksByHost = {
+        ...state.status.stacksByHost,
+        [action.hostName]: action.stacks,
+      };
+      const stacks = flattenStacksByHost(stacksByHost);
+      return {
+        ...state,
+        status: {
+          ...state.status,
+          stacksByHost,
+          stacks,
+          running: isAnyStackRunning(stacks),
+        },
+      };
+    }
+    case "RUNTIME_HOST_CLEARED": {
+      const stacksByHost = { ...state.status.stacksByHost };
+      delete stacksByHost[action.hostName];
+      const stacks = flattenStacksByHost(stacksByHost);
+      return {
+        ...state,
+        status: {
+          ...state.status,
+          stacksByHost,
+          stacks,
+          running: isAnyStackRunning(stacks),
+        },
+      };
+    }
     case "AGENTS_SNAPSHOT":
       return {
         ...state,

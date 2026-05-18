@@ -40,7 +40,7 @@ public sealed partial class AgentSessionStore
             if (!_hostsByConnection.ContainsKey(connectionId))
                 return (false, "Агент не подключён", null);
 
-            await _agentTransportHubContext.Clients.Client(connectionId).SendAsync(
+            await _agentHubContext.Clients.Client(connectionId).SendAsync(
                 ClientMethodDockerComposeUp,
                 new
                 {

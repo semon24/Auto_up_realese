@@ -50,15 +50,4 @@ public sealed class ResolvedAppOptions
     public required bool EnableSwagger { get; init; }
     /// <summary>Полный путь к agents.json или null, если AGENTS_JSON_PATH не задан.</summary>
     public string? AgentsJsonPath { get; init; }
-    public required string DeployProjectsDir { get; init; }
-    public required string FolderForCopyDir { get; init; }
-    public required string StateFileName { get; init; }
-    public required string ImageEnvKey { get; init; }
-    public required string PostgresPasswordEnvKey { get; init; }
-    public required PortAllocationOptions PortAllocation { get; init; }
-    public required string HarborRepository { get; init; }
-    public required string RegistryUrl { get; init; }
-    public required string RegistryUser { get; init; }
-    public required string RegistryPassword { get; init; }
-    public required ServiceLinkEnvKeys ServiceLinkEnvKeys { get; init; }
 }

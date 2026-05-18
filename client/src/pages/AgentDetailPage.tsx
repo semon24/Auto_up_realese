@@ -27,8 +27,6 @@ interface DockerComposeUpResponse {
 export function AgentDetailPage() {
   const { hostName: hostNameParam, tag: tagParam } = useParams();
   const navigate = useNavigate();
-  const { status, items, tagsLoading } = useAppStore();
-  const { loadStatus, loadTags } = usePolling();
 
   const hostName = useMemo(() => {
     if (!hostNameParam) return "";
@@ -38,6 +36,18 @@ export function AgentDetailPage() {
       return hostNameParam;
     }
   }, [hostNameParam]);
+
+  const {
+    status,
+    tagsByHost,
+    tagsLoadingHost,
+    tagsErrorByHost,
+  } = useAppStore();
+
+  const tagItemsForHost = tagsByHost[hostName] ?? [];
+  const tagsLoading = tagsLoadingHost === hostName;
+  const tagsError = tagsErrorByHost[hostName] ?? null;
+  const { loadStatus, loadTags } = usePolling();
   const selectedTagFromRoute = useMemo(() => {
     if (!tagParam) return "";
     try {
@@ -48,6 +58,7 @@ export function AgentDetailPage() {
   }, [tagParam]);
 
   const agentStatus = status.agents[hostName];
+  const agentStacks = status.stacksByHost[hostName] ?? [];
   const [password, setPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -65,26 +76,26 @@ export function AgentDetailPage() {
   const needsPassword = agentStatus === AGENT_STATUS_WAITING_PASSWORD;
   const isDisconnected = agentStatus === AGENT_STATUS_DISCONNECTED;
   const runningTagFromStatus = useMemo(() => {
-    const runningStack = status.stacks.find(
+    const runningStack = agentStacks.find(
       (s) => s.running || s.operationStatus === "in_progress"
     );
     return runningStack?.tag ?? null;
-  }, [status.stacks]);
+  }, [agentStacks]);
   const managedTag = selectedTagFromRoute || lastStartedTag || runningTagFromStatus;
   const managedStack = useMemo(
-    () => status.stacks.find((stack) => stack.tag === managedTag) ?? null,
-    [managedTag, status.stacks]
+    () => agentStacks.find((stack) => stack.tag === managedTag) ?? null,
+    [managedTag, agentStacks]
   );
   const agentTags = useMemo(
     () =>
       Array.from(
         new Set(
-          status.stacks
+          agentStacks
             .map((stack) => stack.tag)
             .filter((tag) => typeof tag === "string" && tag.trim().length > 0)
         )
       ),
-    [status.stacks]
+    [agentStacks]
   );
   const managedLinks = managedStack?.serviceLinks ?? launchLinks;
   const selectedServices = useMemo(
@@ -363,15 +374,18 @@ export function AgentDetailPage() {
                   autoComplete="off"
                 />
                 <datalist id="agent-launch-tags">
-                  {items.map((item) => (
+                  {tagItemsForHost.map((item) => (
                     <option key={item.tag} value={item.tag} />
                   ))}
                 </datalist>
+                {tagsError && (
+                  <p className="agent-detail__error">{tagsError}</p>
+                )}
                 <button
                   type="button"
                   className="agent-detail__refresh"
                   disabled={tagsLoading || launching}
-                  onClick={() => void loadTags()}
+                  onClick={() => void loadTags(hostName)}
                 >
                   {tagsLoading ? "…" : "Обновить теги"}
                 </button>

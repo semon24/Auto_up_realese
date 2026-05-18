@@ -47,6 +47,23 @@ public sealed class AgentServicesSnapshotStore
         return result;
     }
 
+    public Dictionary<string, Dictionary<string, StackSnapshot>> GetFreshStacksByHost(TimeSpan maxAge)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var result = new Dictionary<string, Dictionary<string, StackSnapshot>>(StringComparer.Ordinal);
+        foreach (var hostEntry in _snapshotsByHost)
+        {
+            if (now - hostEntry.Value.UpdatedAtUtc > maxAge)
+                continue;
+
+            result[hostEntry.Key] = new Dictionary<string, StackSnapshot>(
+                hostEntry.Value.Stacks,
+                StringComparer.Ordinal);
+        }
+
+        return result;
+    }
+
     static Dictionary<string, StackSnapshot> ParseStacks(JsonElement payload)
     {
         var result = new Dictionary<string, StackSnapshot>(StringComparer.Ordinal);

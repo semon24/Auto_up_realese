@@ -42,7 +42,7 @@ public sealed partial class AgentSessionStore
             if (!_hostsByConnection.ContainsKey(connectionId))
                 return (false, "Агент не подключён");
 
-            await _agentTransportHubContext.Clients.Client(connectionId).SendAsync(
+            await _agentHubContext.Clients.Client(connectionId).SendAsync(
                 ClientMethodVerifyPassword,
                 new
                 {

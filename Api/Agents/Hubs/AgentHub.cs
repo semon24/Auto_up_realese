@@ -1,3 +1,5 @@
+using AutoUpRelease.Api;
+using AutoUpRelease.Api.Agents;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -5,10 +7,12 @@ using System.Text.Json;
 namespace AutoUpRelease.Api.Agents.Hubs;
 
 /// <summary>SignalR-хаб для подключения агентов к API.</summary>
-public sealed class AgentTransportHub(
+public sealed class AgentHub(
     AgentSessionStore sessions,
     AgentServicesSnapshotStore snapshotStore,
-    IOptions<HubOptions> hubOptions) : Hub
+    HarborTagsOrchestrator harborTagsOrchestrator,
+    IOptions<HubOptions> hubOptions,
+    IHubContext<UiHub> uiHubContext) : Hub
 {
     const string HostNameContextKey = "agent-host-name";
     readonly TimeSpan _clientTimeoutInterval = hubOptions.Value.ClientTimeoutInterval ?? TimeSpan.FromMinutes(3);
@@ -56,17 +60,51 @@ public sealed class AgentTransportHub(
         return Task.CompletedTask;
     }
 
+    /// <remarks>
+    /// Массив тегов через <see cref="JsonElement"/> — входящее тело могло прилететь как массив с полем <c>tag</c> без строгой привязки к типам клиента агента.
+    /// </remarks>
+    public Task TagsUpdated(string id, bool ok, JsonElement tagsPayload, string? error)
+    {
+        TagItem[]? tags = ok ? DeserializeTagItems(tagsPayload) : null;
+        harborTagsOrchestrator.Complete(id, ok, tags, error);
+        return Task.CompletedTask;
+    }
+
+    static TagItem[] DeserializeTagItems(JsonElement tagsPayload)
+    {
+        try
+        {
+            if (tagsPayload.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                return Array.Empty<TagItem>();
+            return tagsPayload.Deserialize<TagItem[]>(HubSerialization.TagItemsJson) ?? Array.Empty<TagItem>();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] TagsUpdated: ошибка парсинга массива тегов — {ex.Message}");
+            return Array.Empty<TagItem>();
+        }
+    }
+
     /// <summary>Периодический snapshot сервисов от агента.</summary>
-    public Task AgentServicesSnapshot(JsonElement payload)
+    public async Task AgentServicesSnapshot(JsonElement payload)
     {
         if (!Context.Items.TryGetValue(HostNameContextKey, out var hostNameObj) || hostNameObj is not string hostName || hostName.Length == 0)
-            return Task.CompletedTask;
+            return ;
 
         var stacksCount = snapshotStore.Upsert(hostName, payload);
         Console.WriteLine(
             $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] получен snapshot от агента: host={hostName}, stacks={stacksCount}");
         LogAcceptedServiceLinks(hostName, payload);
-        return Task.CompletedTask;
+
+        await uiHubContext.Clients.All.SendAsync(
+            UiHub.EventStatusUpdated,
+            new
+            {
+                hostName,
+                stacksCount,
+                snapshot = payload
+            });
     }
 
     static void LogAcceptedServiceLinks(string hostName, JsonElement payload)

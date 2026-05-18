@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 export interface PollingApi {
-  loadTags: () => void;
+  loadTags: (agentHostName: string) => void;
   loadStatus: () => Promise<void>;
 }
 

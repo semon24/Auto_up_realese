@@ -1,6 +1,7 @@
 using AutoUpRelease.Api;
 using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
+using Microsoft.AspNetCore.SignalR;
 
 namespace AutoUpRelease.Api.Agents;
 
@@ -13,7 +14,7 @@ public static class AgentRoutes
         AgentPasswordBody? body, 
         AgentSessionStore sessions, 
         AgentsJsonFile agentsJson, 
-        AgentHubPublisher agentHubPublisher,
+        IHubContext<UiHub> uiHubContext,
         CancellationToken ct) =>
         {
             var pwd = body?.Password?.Trim();
@@ -31,16 +32,16 @@ public static class AgentRoutes
             if (!agentsJson.TryMarkPasswordAccepted(hostName, out var err))
                 return Results.Json(new { error = err }, statusCode: 400);
 
-            await agentHubPublisher.PublishAgentUpdatedAsync(hostName, ct);
+            await UiHub.PublishAgentUpdatedAsync(uiHubContext, agentsJson, hostName, ct);
 
             return Results.Json(new { ok = true });
         });
 
-        app.MapDelete("/api/agents/{hostName}", async (string hostName, AgentsJsonFile agentsJson, AgentHubPublisher agentHubPublisher, CancellationToken ct) =>
+        app.MapDelete("/api/agents/{hostName}", async (string hostName, AgentsJsonFile agentsJson, IHubContext<UiHub> uiHubContext, CancellationToken ct) =>
         {
             if (!agentsJson.TryRemoveIfDisconnected(hostName, out var err))
                 return Results.Json(new { error = err }, statusCode: 400);
-            await agentHubPublisher.PublishAgentUpdatedAsync(hostName, ct);
+            await UiHub.PublishAgentUpdatedAsync(uiHubContext, agentsJson, hostName, ct);
             return Results.Json(new { ok = true });
         });
 

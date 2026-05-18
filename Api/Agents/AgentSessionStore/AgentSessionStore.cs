@@ -11,17 +11,17 @@ public sealed partial class AgentSessionStore
     readonly ConcurrentDictionary<string, string> _connectionsByHost = new();
     readonly ConcurrentDictionary<string, string> _hostsByConnection = new();
     readonly AgentsJsonFile _agentsJsonFile;
-    readonly IHubContext<AgentTransportHub> _agentTransportHubContext;
-    readonly AgentHubPublisher _agentHubPublisher;
+    readonly IHubContext<AgentHub> _agentHubContext;
+    readonly IHubContext<UiHub> _uiHubContext;
 
     public AgentSessionStore(
         AgentsJsonFile agentsStatusJsonFile,
-        IHubContext<AgentTransportHub> agentTransportHubContext,
-        AgentHubPublisher agentHubPublisher)
+        IHubContext<AgentHub> agentHubContext,
+        IHubContext<UiHub> uiHubContext)
     {
         _agentsJsonFile = agentsStatusJsonFile;
-        _agentTransportHubContext = agentTransportHubContext;
-        _agentHubPublisher = agentHubPublisher;
+        _agentHubContext = agentHubContext;
+        _uiHubContext = uiHubContext;
     }
 
     public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, CancellationToken cancellationToken)
@@ -35,7 +35,7 @@ public sealed partial class AgentSessionStore
         _hostsByConnection[connectionId] = normalizedHostName;
         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] агент подключился: {normalizedHostName}");
         _agentsJsonFile.UpsertOnAgentConnected(normalizedHostName);
-        return _agentHubPublisher.PublishAgentUpdatedAsync(normalizedHostName, cancellationToken);
+        return UiHub.PublishAgentUpdatedAsync(_uiHubContext, _agentsJsonFile, normalizedHostName, cancellationToken);
     }
 
     public Task UnregisterAgentConnectionAsync(string connectionId)
@@ -54,7 +54,18 @@ public sealed partial class AgentSessionStore
         _connectionsByHost.TryRemove(normalizedHostName, out _);
         OnAgentDisconnected(normalizedHostName);
         _agentsJsonFile.OnAgentWebSocketClosed(normalizedHostName);
-        return _agentHubPublisher.PublishAgentUpdatedAsync(normalizedHostName);
+        return UiHub.PublishAgentUpdatedAsync(_uiHubContext, _agentsJsonFile, normalizedHostName);
+    }
+
+    /// <summary>Текущий SignalR-connectionId для агента по имени хоста.</summary>
+    public bool TryGetAgentConnectionForHost(string? hostName, out string connectionId)
+    {
+        connectionId = "";
+        if (Normalize(hostName) is not { } normalizedHostName)
+            return false;
+
+        return _connectionsByHost.TryGetValue(normalizedHostName, out connectionId!)
+            && !string.IsNullOrWhiteSpace(connectionId);
     }
 
     void OnAgentDisconnected(string normalizedHostName)

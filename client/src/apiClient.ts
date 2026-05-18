@@ -3,7 +3,16 @@ interface ApiErrorBody {
 }
 
 export function errMessage(e: unknown): string {
-  if (e instanceof Error) return e.message;
+  if (e instanceof Error) {
+    let msg = e.message;
+    const failedInvoke =
+      msg.includes("'GetHarborTags'") && /Failed to invoke/i.test(msg);
+    if (failedInvoke) {
+      msg =
+        `${msg} Проверьте совпадение имени хоста в UI с параметром подключения агента и логи API (ответ агента TagsUpdated/Harbor).`;
+    }
+    return msg;
+  }
   return String(e);
 }
 
