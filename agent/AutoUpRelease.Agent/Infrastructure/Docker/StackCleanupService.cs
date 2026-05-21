@@ -1,9 +1,13 @@
-using System.Text.Json;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace AutoUpRelease.Agent;
 
-public static class DockerComposeFullCleanup
+/// <summary>
+/// Полное удаление рабочего стека: compose down, compose-ресурсы, external ресурсы и рабочая папка.
+/// Используется и как rollback после неудачного старта, и как штатный teardown при stop/down.
+/// </summary>
+public static class StackCleanupService
 {
     const string DockerCli = "docker";
     const string DockerComposeCli = DockerCli;
@@ -18,7 +22,7 @@ public static class DockerComposeFullCleanup
 
         Console.WriteLine($"[cleanup] начало очистки стека: {stackDir}");
 
-        // Всегда пытаемся снять проект compose, даже если up оборвался на полпути или нет «running».
+        // Всегда пытаемся снять проект compose, даже если up оборвался на полпути или нет "running".
         // -v: именованные volumes из compose; --remove-orphans: висящие контейнеры.
         await TryComposeDownAsync(stackDir);
         await RemoveComposeResourcesAsync(stackDir);
@@ -37,7 +41,7 @@ public static class DockerComposeFullCleanup
         try
         {
             await DockerCompose.RunAsync(stackDir, null, "down", "-v", "--remove-orphans");
-            Console.WriteLine($"[cleanup] docker compose down выполнен успешно");
+            Console.WriteLine("[cleanup] docker compose down выполнен успешно");
         }
         catch (Exception cleanupEx)
         {

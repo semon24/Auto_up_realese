@@ -67,6 +67,28 @@ public static class AgentRoutes
             return Results.Json(new { ok = true, payload });
         });
 
+        app.MapPost("/api/agents/{hostName}/docker-compose-down", async (
+            string hostName,
+            StartBody? body,
+            AgentSessionStore sessions,
+            CancellationToken ct) =>
+        {
+            var tag = body?.Tag?.Trim();
+            if (string.IsNullOrEmpty(tag))
+                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+
+            var (ok, error, payload) = await sessions.StartDockerComposeDownWithAgentAsync(
+                hostName,
+                tag,
+                TimeSpan.FromMinutes(15),
+                ct);
+
+            if (!ok)
+                return Results.Json(new { error = error ?? "Ошибка запуска на агенте" }, statusCode: 400);
+
+            return Results.Json(new { ok = true, payload });
+        });
+
         return app;
     }
 }

@@ -116,10 +116,18 @@ export function MainPage() {
   async function onPrimaryClick() {
     dispatchApp({ type: "ACTION_ERROR_SET", error: null });
     if (selectedTagView && selectedStack?.running) {
+      const hostName = selectedStack.hostName?.trim();
+      if (!hostName) {
+        dispatchApp({
+          type: "ACTION_ERROR_SET",
+          error: "Не удалось определить хост агента для остановки проекта.",
+        });
+        return;
+      }
       if (pendingStopTags.includes(selectedTagView)) return;
       setPendingStopTags((prev) => [...prev, selectedTagView]);
       try {
-        await api("/api/stop", {
+        await api(`/api/agents/${encodeURIComponent(hostName)}/docker-compose-down`, {
           method: "POST",
           body: JSON.stringify({ tag: selectedTagView }),
         });

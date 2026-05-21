@@ -11,10 +11,31 @@ public static partial class DockerCompose
     public static async Task RunUpDetachedWithDiagnosticsAsync(
         string composeDir,
         IReadOnlyList<string>? composeFiles = null,
-        int failedServiceLogsTail = 120)
+        int failedServiceLogsTail = 120,
+        Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
+        TimeSpan? progressPollInterval = null)
     {
         var upArgs = BuildComposeArgs(composeFiles, "up", "-d");
+        using var progressCts = new CancellationTokenSource();
+        Task? progressTask = null;
+
+        if (onProgress is not null)
+        {
+            progressTask = PollServicesStateUntilCancelledAsync(
+                composeDir,
+                progressPollInterval ?? TimeSpan.FromSeconds(2),
+                onProgress,
+                composeFiles,
+                progressCts.Token);
+        }
+
         var (stdout, stderr, exitCode) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, upArgs.ToArray());
+
+        if (progressTask is not null)
+        {
+            progressCts.Cancel();
+            await progressTask;
+        }
 
         if (exitCode == 0)
             return;

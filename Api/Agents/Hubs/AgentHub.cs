@@ -60,6 +60,13 @@ public sealed class AgentHub(
         return Task.CompletedTask;
     }
 
+    /// <summary>Результат выполнения команды docker compose down на агенте.</summary>
+    public Task DockerComposeDownCompleted(string id, bool ok, string? error, object? payload)
+    {
+        sessions.HandleDockerComposeDownCompleted(Context.ConnectionId, id, ok, error, payload);
+        return Task.CompletedTask;
+    }
+
     /// <remarks>
     /// Массив тегов через <see cref="JsonElement"/> — входящее тело могло прилететь как массив с полем <c>tag</c> без строгой привязки к типам клиента агента.
     /// </remarks>
@@ -76,7 +83,7 @@ public sealed class AgentHub(
         {
             if (tagsPayload.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
                 return Array.Empty<TagItem>();
-            return tagsPayload.Deserialize<TagItem[]>(HubSerialization.TagItemsJson) ?? Array.Empty<TagItem>();
+            return tagsPayload.Deserialize<TagItem[]>(TagItemsJson) ?? Array.Empty<TagItem>();
         }
         catch (Exception ex)
         {
@@ -86,11 +93,24 @@ public sealed class AgentHub(
         }
     }
 
+    static readonly JsonSerializerOptions TagItemsJson = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     /// <summary>Периодический snapshot сервисов от агента.</summary>
     public async Task AgentServicesSnapshot(JsonElement payload)
     {
         if (!Context.Items.TryGetValue(HostNameContextKey, out var hostNameObj) || hostNameObj is not string hostName || hostName.Length == 0)
             return ;
+        
+        if (!sessions.IsAuthorizedAgent(hostName))
+        {
+            Console.WriteLine(
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] snapshot проигнорирован: host={hostName}, reason=password not accepted");
+            return;
+        }
 
         var stacksCount = snapshotStore.Upsert(hostName, payload);
         Console.WriteLine(

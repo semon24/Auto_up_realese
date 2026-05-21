@@ -75,6 +75,7 @@ export function AgentDetailPage() {
 
   const needsPassword = agentStatus === AGENT_STATUS_WAITING_PASSWORD;
   const isDisconnected = agentStatus === AGENT_STATUS_DISCONNECTED;
+  const isManagementLocked = needsPassword || isDisconnected;
   const runningTagFromStatus = useMemo(() => {
     const runningStack = agentStacks.find(
       (s) => s.running || s.operationStatus === "in_progress"
@@ -115,6 +116,7 @@ export function AgentDetailPage() {
     !!managedStack &&
     managedStack.running &&
     managedStack.operationStatus !== "in_progress";
+  const shouldShowManagedLinks = isManagedProjectReady && linkEntries.length > 0;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -198,10 +200,13 @@ export function AgentDetailPage() {
     setLaunchOk(null);
     setStoppingProject(true);
     try {
-      await api<{ ok?: boolean }>("/api/stop", {
+      await api<{ ok?: boolean }>(
+        `/api/agents/${encodeURIComponent(hostName)}/docker-compose-down`,
+        {
         method: "POST",
         body: JSON.stringify({ tag: managedTag }),
-      });
+        }
+      );
       setLaunchOk(`Проект ${managedTag} остановлен.`);
       setLastStartedTag(null);
       setLaunchLinks(null);
@@ -247,6 +252,7 @@ export function AgentDetailPage() {
         <button
           type="button"
           className="agent-detail__manage-top"
+          disabled={isManagementLocked}
           onClick={() => void navigate(`/agents/${encodeURIComponent(hostName)}`)}
         >
           Перейти к управлению запуском сервисов
@@ -262,6 +268,7 @@ export function AgentDetailPage() {
                     ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--active"
                     : "agent-detail__tag-nav-btn"
                 }
+                disabled={isManagementLocked}
                 onClick={() =>
                   void navigate(
                     `/agents/${encodeURIComponent(hostName)}/${encodeURIComponent(tag)}`
@@ -401,7 +408,7 @@ export function AgentDetailPage() {
             <div className="agent-detail__launch-feedback">
               {launchError && <p className="agent-detail__error">{launchError}</p>}
               {launchOk && <p className="agent-detail__ok">{launchOk}</p>}
-              {launchLinks && (
+              {launchLinks && !isManagedProjectLoading && (
                 <pre className="agent-detail__links">
                   {JSON.stringify(launchLinks, null, 2)}
                 </pre>
@@ -434,12 +441,12 @@ export function AgentDetailPage() {
             </div>
           )}
 
-          {managedLinks ? (
+          {shouldShowManagedLinks && managedLinks ? (
             <ServiceLinksBlock links={managedLinks} />
           ) : (
             <div className="agent-detail__panel-links">
               <p className="agent-detail__panel-title">Ссылки сервисов</p>
-              {linkEntries.length === 0 ? (
+              {!isManagedProjectReady || linkEntries.length === 0 ? (
                 <p className="agent-detail__hint">
                   Ссылки появятся после успешного запуска.
                 </p>

@@ -2,34 +2,17 @@ services:
   api-auto-up-release:
     image: registry.ft-soft.ru/devops/api-auto-up-release:latest
     ports:
-      - "3002:3001"
+      - "3001:3001"
     environment:
-      DEPLOY_PROJECTS_DIR: ${DEPLOY_PROJECTS_DIR}
-      COPY_FOLDER_FOR_DEPLOY_PATH: ${COPY_FOLDER_FOR_DEPLOY_PATH}
-      IMAGE_ENV_KEY: ${IMAGE_ENV_KEY}
-      ServiceLinkEnvKeys__Admin: ${ServiceLinkEnvKeys__Admin}
-      ServiceLinkEnvKeys__Server: ${ServiceLinkEnvKeys__Server}
-      ServiceLinkEnvKeys__Portal: ${ServiceLinkEnvKeys__Portal}
-      ServiceLinkEnvKeys__Call: ${ServiceLinkEnvKeys__Call}
-      REGISTRY_URL: ${REGISTRY_URL}
-      REGISTRY_USER: ${REGISTRY_USER}
-      REGISTRY_PASSWORD: ${REGISTRY_PASSWORD}
-      HARBOR_REPOSITORY: ${HARBOR_REPOSITORY}
-      STATE_FILE: ${STATE_FILE}
-      POSTGRES_PASSWORD_ENV_KEY: ${POSTGRES_PASSWORD_ENV_KEY}
-      ENABLE_SWAGGER: ${ENABLE_SWAGGER}
+      AGENTS_JSON_PATH: ${AGENTS_JSON_PATH}
     volumes:
-      # каталог с docker-compose приложения и deploy/.env (подставьте свой путь на сервере)
-      - /opt/vneocheredi_auto_release_up/deploy_vneocheredi:/opt/vneocheredi_auto_release_up/deploy_vneocheredi
-      - /opt/vneocheredi_auto_release_up/data:/opt/vneocheredi_auto_release_up/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/vneocheredi_auto_release_up/deploy_auto_up_release:/opt/vneocheredi_auto_release_up/deploy_auto_up_release
     networks:
       - network-auto-up-release
 
   web-auto-up-release:
     image: registry.ft-soft.ru/devops/web-auto-up-release:latest
     ports:
-      # nginx в образе слушает 80 (client/Dockerfile EXPOSE 80)
       - "8085:80"
     depends_on:
       - api-auto-up-release

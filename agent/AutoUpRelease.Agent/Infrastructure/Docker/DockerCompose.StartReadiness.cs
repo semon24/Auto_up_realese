@@ -2,12 +2,37 @@ namespace AutoUpRelease.Agent;
 
 public static partial class DockerCompose
 {
+    public static async Task PollServicesStateUntilCancelledAsync(
+        string composeDir,
+        TimeSpan pollInterval,
+        Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
+        IReadOnlyList<string>? composeFiles = null,
+        CancellationToken ct = default)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            var latest = await GetServicesStateAsync(composeDir, composeFiles);
+            if (onProgress is not null)
+                await onProgress(latest);
+
+            try
+            {
+                await Task.Delay(pollInterval, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
+
     public static async Task<(bool IsReady, bool HasFailure, string? Reason, Dictionary<string, DockerServiceState> ServicesState)>
         WaitForServicesReadyAsync(
             string composeDir,
             TimeSpan timeout,
             TimeSpan pollInterval,
             CancellationToken ct,
+            Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
             IReadOnlyList<string>? composeFiles = null)
     {
         var startedAt = DateTimeOffset.UtcNow;
@@ -18,6 +43,8 @@ public static partial class DockerCompose
             ct.ThrowIfCancellationRequested();
 
             latest = await GetServicesStateAsync(composeDir, composeFiles);
+            if (onProgress is not null)
+                await onProgress(latest);
             if (latest.Count == 0)
             {
                 // Fallback для сред, где `docker compose ps --format json` недоступен

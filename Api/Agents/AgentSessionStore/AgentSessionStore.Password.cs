@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AutoUpRelease.Api.Agents.Json;
 using Microsoft.AspNetCore.SignalR;
 
 namespace AutoUpRelease.Api.Agents;

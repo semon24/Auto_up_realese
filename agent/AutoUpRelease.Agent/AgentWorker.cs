@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
 using AutoUpRelease.Agent.Commands;
 using AutoUpRelease.Agent.Services.StartStackService;
+using AutoUpRelease.Agent.Services.StopStackService;
 
 namespace AutoUpRelease.Agent;
 
@@ -12,11 +13,16 @@ public sealed class AgentWorker : BackgroundService
 
     private readonly AppOptions _appOptions;
     private readonly StartStackService _startStackService;
+    private readonly StopStackService _stopStackService;
 
-    public AgentWorker(IOptions<AppOptions> appOptions, StartStackService startStackService)
+    public AgentWorker(
+        IOptions<AppOptions> appOptions,
+        StartStackService startStackService,
+        StopStackService stopStackService)
     {
         _appOptions = appOptions.Value;
         _startStackService = startStackService;
+        _stopStackService = stopStackService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -70,6 +76,7 @@ public sealed class AgentWorker : BackgroundService
 
         AgentSignalRPasswordMessages.Register(connection, _appOptions);
         DockerComposeUpSignalRMessages.Register(connection, _startStackService);
+        DockerComposeDownSignalRMessages.Register(connection, _stopStackService);
         UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
         try
         {

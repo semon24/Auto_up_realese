@@ -31,6 +31,11 @@
   cursor: pointer;
 }
 
+.agent-detail__manage-top:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .agent-detail__back {
   align-self: flex-start;
   color: #58a6ff;
@@ -218,6 +223,11 @@
   color: #c9d1d9;
   cursor: pointer;
   text-align: left;
+}
+
+.agent-detail__tag-nav-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .agent-detail__tag-nav-btn--active {

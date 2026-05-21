@@ -1,11 +1,13 @@
 using AutoUpRelease.Agent;
 using AutoUpRelease.Agent.Services.StartStackService;
+using AutoUpRelease.Agent.Services.StopStackService;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<StartStackService>();
+builder.Services.AddSingleton<StopStackService>();
 builder.Services.AddHostedService<AgentWorker>();
 builder.Services.AddOptions<AppOptions>()
     .Bind(builder.Configuration)

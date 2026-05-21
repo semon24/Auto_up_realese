@@ -41,7 +41,7 @@ public sealed partial class StartStackService
             context.Tag,
             context.StackEnvFile,
             keys,
-            scanMin: 1,
+            scanMin: 1024,
             scanMax: 65535,
             ct);
 

@@ -41,7 +41,7 @@ public sealed partial class StartStackService
             _options.AgentHostName,
             _options.ServiceLinkEnvKeys);
 
-        await DockerComposeFullCleanup.CleanupStackAsync(context.StackDir);
+        await StackCleanupService.CleanupStackAsync(context.StackDir);
         await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
             context.DeployProjectsDir,
             context.StateFileName,
