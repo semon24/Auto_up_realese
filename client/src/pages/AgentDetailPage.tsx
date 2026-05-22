@@ -57,7 +57,22 @@ export function AgentDetailPage() {
     }
   }, [tagParam]);
 
-  const agentStatus = status.agents[hostName];
+  const agentInfo = status.agents[hostName];
+  const agentStatus = agentInfo?.status;
+  const agentIpAddress = useMemo(() => {
+    const raw = agentInfo?.ipAddress?.trim();
+    if (!raw) return null;
+    return raw.startsWith("::ffff:") ? raw.slice("::ffff:".length) : raw;
+  }, [agentInfo?.ipAddress]);
+  const agentDisconnectedAtText = useMemo(() => {
+    const raw = agentInfo?.disconnectedAtUtc?.trim();
+    if (!raw) return null;
+
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+
+    return parsed.toLocaleString("ru-RU");
+  }, [agentInfo?.disconnectedAtUtc]);
   const agentStacks = status.stacksByHost[hostName] ?? [];
   const [password, setPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -69,6 +84,7 @@ export function AgentDetailPage() {
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [launchOk, setLaunchOk] = useState<string | null>(null);
   const [launchLinks, setLaunchLinks] = useState<ServiceLinks | null>(null);
+  const [isLaunchPanelOpen, setIsLaunchPanelOpen] = useState(false);
   const [lastStartedTag, setLastStartedTag] = useState<string | null>(null);
   const [stoppingProject, setStoppingProject] = useState(false);
   const isTagRoute = selectedTagFromRoute.length > 0;
@@ -116,6 +132,15 @@ export function AgentDetailPage() {
     !!managedStack &&
     managedStack.running &&
     managedStack.operationStatus !== "in_progress";
+  const managedOperationStatus =
+    managedStack?.operationStatus ??
+    (isManagedProjectLoading ? "in_progress" : "нет данных");
+  const managedOperationStatusClassName =
+    managedOperationStatus === "success"
+      ? "agent-detail__status-line agent-detail__status-line--success"
+      : managedOperationStatus === "in_progress"
+        ? "agent-detail__status-line agent-detail__status-line--progress"
+        : "agent-detail__status-line";
   const shouldShowManagedLinks = isManagedProjectReady && linkEntries.length > 0;
 
   async function onSubmit(e: FormEvent) {
@@ -257,29 +282,6 @@ export function AgentDetailPage() {
         >
           Перейти к управлению запуском сервисов
         </button>
-        {agentTags.length > 0 && (
-          <div className="agent-detail__tags-nav">
-            {agentTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className={
-                  tag === managedTag
-                    ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--active"
-                    : "agent-detail__tag-nav-btn"
-                }
-                disabled={isManagementLocked}
-                onClick={() =>
-                  void navigate(
-                    `/agents/${encodeURIComponent(hostName)}/${encodeURIComponent(tag)}`
-                  )
-                }
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       <Link to="/agents" className="agent-detail__back">
@@ -300,6 +302,16 @@ export function AgentDetailPage() {
           >
             Статус: <strong>{agentStatus}</strong>
           </p>
+          {agentIpAddress && (
+            <p className="agent-detail__meta-line">
+              IP агента: <strong>{agentIpAddress}</strong>
+            </p>
+          )}
+          {agentDisconnectedAtText && (
+            <p className="agent-detail__meta-line">
+              Дата дисконнекта: <strong>{agentDisconnectedAtText}</strong>
+            </p>
+          )}
         </>
       )}
 
@@ -362,48 +374,110 @@ export function AgentDetailPage() {
         agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED && (
           <>
             <p className="agent-detail__ok">Пароль принят.</p>
-            <div className="agent-detail__launch-layout">
-              <form
-                className="agent-detail__form agent-detail__form--launch"
-                onSubmit={(e) => void onLaunch(e)}
+            <div className="agent-detail__launch-section">
+              <button
+                type="button"
+                className="agent-detail__add-project"
+                onClick={() => setIsLaunchPanelOpen((value) => !value)}
               >
-                <label className="agent-detail__label" htmlFor="agent-launch-tag">
-                  Тег образа
-                </label>
-                <input
-                  id="agent-launch-tag"
-                  list="agent-launch-tags"
-                  type="text"
-                  className="agent-detail__input"
-                  value={launchTag}
-                  onChange={(e) => setLaunchTag(e.target.value)}
-                  placeholder="Введите или выберите тег"
-                  autoComplete="off"
-                />
-                <datalist id="agent-launch-tags">
-                  {tagItemsForHost.map((item) => (
-                    <option key={item.tag} value={item.tag} />
+                {isLaunchPanelOpen ? "Скрыть форму проекта" : "Добавить новый проект"}
+              </button>
+              {isLaunchPanelOpen && (
+                <div className="agent-detail__launch-layout">
+                  <form
+                    className="agent-detail__form agent-detail__form--launch"
+                    onSubmit={(e) => void onLaunch(e)}
+                  >
+                    <label className="agent-detail__label" htmlFor="agent-launch-tag">
+                      Тег образа
+                    </label>
+                    <input
+                      id="agent-launch-tag"
+                      list="agent-launch-tags"
+                      type="text"
+                      className="agent-detail__input"
+                      value={launchTag}
+                      onChange={(e) => setLaunchTag(e.target.value)}
+                      placeholder="Введите или выберите тег"
+                      autoComplete="off"
+                    />
+                    <datalist id="agent-launch-tags">
+                      {tagItemsForHost.map((item) => (
+                        <option key={item.tag} value={item.tag} />
+                      ))}
+                    </datalist>
+                    {tagsError && (
+                      <p className="agent-detail__error">{tagsError}</p>
+                    )}
+                    <button
+                      type="button"
+                      className="agent-detail__refresh"
+                      disabled={tagsLoading || launching}
+                      onClick={() => void loadTags(hostName)}
+                    >
+                      {tagsLoading ? "…" : "Обновить теги"}
+                    </button>
+                    <button
+                      type="submit"
+                      className="agent-detail__submit"
+                      disabled={launching}
+                    >
+                      {launching ? "…" : "Поднять проект"}
+                    </button>
+                  </form>
+                </div>
+              )}
+              {agentTags.length > 0 && (
+                <div className="agent-detail__tags-grid">
+                  {agentTags.map((tag) => (
+                    (() => {
+                      const stackForTag =
+                        agentStacks.find((stack) => stack.tag === tag) ?? null;
+                      const isInProgressTag =
+                        stackForTag?.operationStatus === "in_progress";
+                      const isSuccessTag =
+                        stackForTag?.operationStatus === "success";
+                      const tagCardClassName = isInProgressTag
+                        ? "agent-detail__tag-card agent-detail__tag-card--progress"
+                        : isSuccessTag
+                          ? "agent-detail__tag-card agent-detail__tag-card--active"
+                          : "agent-detail__tag-card";
+                      const tagButtonClassName = isInProgressTag
+                        ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--progress"
+                        : isSuccessTag
+                          ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--active"
+                          : "agent-detail__tag-nav-btn";
+
+                      return (
+                        <div key={tag} className={tagCardClassName}>
+                          <button
+                            type="button"
+                            className={tagButtonClassName}
+                            disabled={isManagementLocked}
+                            onClick={() =>
+                              void navigate(
+                                `/agents/${encodeURIComponent(hostName)}/${encodeURIComponent(tag)}`
+                              )
+                            }
+                          >
+                            {tag}
+                          </button>
+                          {isSuccessTag && stackForTag?.serviceLinks?.admin && (
+                            <a
+                              href={stackForTag.serviceLinks.admin}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="agent-detail__tag-admin-link"
+                            >
+                              Админка
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()
                   ))}
-                </datalist>
-                {tagsError && (
-                  <p className="agent-detail__error">{tagsError}</p>
-                )}
-                <button
-                  type="button"
-                  className="agent-detail__refresh"
-                  disabled={tagsLoading || launching}
-                  onClick={() => void loadTags(hostName)}
-                >
-                  {tagsLoading ? "…" : "Обновить теги"}
-                </button>
-                <button
-                  type="submit"
-                  className="agent-detail__submit"
-                  disabled={launching}
-                >
-                  {launching ? "…" : "Поднять проект"}
-                </button>
-              </form>
+                </div>
+              )}
             </div>
             <div className="agent-detail__launch-feedback">
               {launchError && <p className="agent-detail__error">{launchError}</p>}
@@ -423,11 +497,10 @@ export function AgentDetailPage() {
         agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED && (
         <section className="agent-detail__tag-page">
           <h2 className="agent-detail__tag-title">{managedTag}</h2>
-          <p className="agent-detail__status-line">
+          <p className={managedOperationStatusClassName}>
             Статус запуска:{" "}
             <strong>
-              {managedStack?.operationStatus ??
-                (isManagedProjectLoading ? "in_progress" : "нет данных")}
+              {managedOperationStatus}
             </strong>
           </p>
 

@@ -19,7 +19,9 @@ public sealed class AgentHub(
 
     public override async Task OnConnectedAsync()
     {
+        var httpContext = Context.GetHttpContext();
         var hostName = Context.GetHttpContext()?.Request.Query["hostName"].FirstOrDefault();
+        var ipAddress = httpContext?.Connection.RemoteIpAddress?.ToString();
         if (string.IsNullOrWhiteSpace(hostName))
         {
             const string message = "hostName query parameter is required";
@@ -28,8 +30,21 @@ public sealed class AgentHub(
             throw new HubException(message);
         }
 
+        if (string.IsNullOrWhiteSpace(ipAddress))
+        {
+            const string message = "RemoteIpAddress is required";
+            Console.Error.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] {message}, connectionId={Context.ConnectionId}");
+            Context.Abort();
+            throw new HubException(message);
+        }
+
         Context.Items[HostNameContextKey] = hostName.Trim();
-        await sessions.RegisterAgentConnectionAsync(hostName, Context.ConnectionId, Context.ConnectionAborted);
+        await sessions.RegisterAgentConnectionAsync(
+            hostName,
+            Context.ConnectionId,
+            ipAddress,
+            Context.ConnectionAborted);
+
         await base.OnConnectedAsync();
     }
 

@@ -13,15 +13,23 @@ export interface ServiceLinks {
   call?: string | null;
 }
 
+export interface AgentConnectionInfo {
+  status: string;
+  ipAddress?: string | null;
+  disconnectedAtUtc?: string | null;
+}
+
 export interface StatusResponse {
   running?: boolean;
   stacks?: StackRuntimeItem[];
-  agents?: Record<string, string>;
+  agents?: Record<string, AgentConnectionInfo>;
 }
 
 export interface AgentUpdatedEvent {
   hostName?: string;
   status?: string | null;
+  ipAddress?: string | null;
+  disconnectedAtUtc?: string | null;
 }
 
 export interface StatusUpdatedEvent {

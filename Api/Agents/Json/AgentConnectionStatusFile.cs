@@ -3,8 +3,7 @@ using System.Text.Json;
 
 namespace AutoUpRelease.Api.Agents.Json;
 
-/// <summary>Потокобезопасное обновление agents.json: hostName → статус.</summary>
-public sealed class AgentsJsonFile
+public sealed class AgentConnectionStatusFile
 {
     public const string StatusWaitingForPassword = "waiting for password";
     public const string StatusPasswordAccepted = "password accepted";
@@ -13,18 +12,18 @@ public sealed class AgentsJsonFile
     readonly string? _path;
     readonly object _lock = new();
 
-    public AgentsJsonFile(string? agentsJsonFullPath) => _path = agentsJsonFullPath;
+    public AgentConnectionStatusFile(string? agentsJsonFullPath) => _path = agentsJsonFullPath;
 
     /// <summary>Текущее содержимое файла (копия), без пути — пустой словарь.</summary>
-    public IReadOnlyDictionary<string, string> ReadSnapshot()
+    public IReadOnlyDictionary<string, AgentConnectionInfo> ReadSnapshot()
     {
         if (_path is null)
-            return ReadOnlyDictionary<string, string>.Empty;
+            return ReadOnlyDictionary<string, AgentConnectionInfo>.Empty;
         lock (_lock)
         {
             var map = ReadMap(_path);
-            return new ReadOnlyDictionary<string, string>(
-                new Dictionary<string, string>(map, StringComparer.Ordinal));
+            return new ReadOnlyDictionary<string, AgentConnectionInfo>(
+                new Dictionary<string, AgentConnectionInfo>(map, StringComparer.Ordinal));
         }
     }
 
@@ -32,27 +31,38 @@ public sealed class AgentsJsonFile
     /// Агент открыл WebSocket: новый хост или после «waiting for password» → «waiting for password»;
     /// после «password accepted» / «disconnected» → сразу «password accepted» (повторный ввод пароля не нужен).
     /// </summary>
-    public void UpsertOnAgentConnected(string hostName)
+    public void UpdateStatusOnConnect(string hostName, string? ipAddress)
     {
         if (_path is null) return;
+
         lock (_lock)
         {
             var map = ReadMap(_path);
+
             if (map.TryGetValue(hostName, out var st))
             {
-                if (string.Equals(st, StatusDisconnected, StringComparison.Ordinal) ||
-                    string.Equals(st, StatusPasswordAccepted, StringComparison.Ordinal))
-                    map[hostName] = StatusPasswordAccepted;
-                else
-                    map[hostName] = StatusWaitingForPassword;
+                st.Status =
+                    string.Equals(st.Status, StatusDisconnected, StringComparison.Ordinal) ||
+                    string.Equals(st.Status, StatusPasswordAccepted, StringComparison.Ordinal)
+                        ? StatusPasswordAccepted
+                        : StatusWaitingForPassword;
+
+                st.IpAddress = ipAddress;
+                st.DisconnectedAtUtc = null;
             }
             else
-                map[hostName] = StatusWaitingForPassword;
+            {
+                map[hostName] = new AgentConnectionInfo
+                {
+                    Status = StatusWaitingForPassword,
+                    IpAddress = ipAddress,
+                    DisconnectedAtUtc = null
+                };
+            }
 
             WriteMap(_path, map);
         }
     }
-
     /// <summary>
     /// Закрытие WebSocket: при «password accepted» → «disconnected», иначе запись удаляется (ещё не вводили пароль и т.п.).
     /// </summary>
@@ -64,8 +74,12 @@ public sealed class AgentsJsonFile
             var map = ReadMap(_path);
             if (!map.TryGetValue(hostName, out var st))
                 return;
-            if (string.Equals(st, StatusPasswordAccepted, StringComparison.Ordinal))
-                map[hostName] = StatusDisconnected;
+            if (string.Equals(st.Status, StatusPasswordAccepted, StringComparison.Ordinal))
+            {
+                st.Status = StatusDisconnected;
+                st.DisconnectedAtUtc = DateTimeOffset.UtcNow;
+            }
+                
             else
                 map.Remove(hostName);
             WriteMap(_path, map);
@@ -113,7 +127,7 @@ public sealed class AgentsJsonFile
                 return false;
             }
 
-            if (!string.Equals(st, StatusDisconnected, StringComparison.Ordinal))
+            if (!string.Equals(st.Status, StatusDisconnected, StringComparison.Ordinal))
             {
                 error = "Удалить можно только агента в статусе disconnected";
                 return false;
@@ -154,42 +168,43 @@ public sealed class AgentsJsonFile
                 return false;
             }
 
-            if (!string.Equals(st, StatusWaitingForPassword, StringComparison.Ordinal))
+            if (!string.Equals(st.Status, StatusWaitingForPassword, StringComparison.Ordinal))
             {
                 error = "Пароль уже введён или статус другой";
                 return false;
             }
 
-            map[key] = StatusPasswordAccepted;
+            map[key].Status = StatusPasswordAccepted;
             WriteMap(_path, map);
         }
 
         return true;
     }
 
-    static Dictionary<string, string> ReadMap(string path)
+    static Dictionary<string, AgentConnectionInfo> ReadMap(string path)
     {
         if (!File.Exists(path))
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return new Dictionary<string, AgentConnectionInfo>(StringComparer.Ordinal);
         var text = File.ReadAllText(path).Trim();
         if (text.Length == 0 || text[0] == '[')
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return new Dictionary<string, AgentConnectionInfo>(StringComparer.Ordinal);
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, string>>(text)
-                   ?? new Dictionary<string, string>(StringComparer.Ordinal);
+            return JsonSerializer.Deserialize<Dictionary<string, AgentConnectionInfo>>(text)
+                   ?? new Dictionary<string, AgentConnectionInfo>(StringComparer.Ordinal);
         }
         catch
         {
-            return new Dictionary<string, string>(StringComparer.Ordinal);
+            return new Dictionary<string, AgentConnectionInfo>(StringComparer.Ordinal);
         }
     }
 
-    static void WriteMap(string path, Dictionary<string, string> map)
+    static void WriteMap(string path, Dictionary<string, AgentConnectionInfo> map)
     {
         var json = JsonSerializer.Serialize(
             map,
             new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(path, json);
     }
+
 }

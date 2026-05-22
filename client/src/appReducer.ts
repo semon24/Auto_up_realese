@@ -2,7 +2,12 @@ import {
   flattenStacksByHost,
   isAnyStackRunning,
 } from "./utils/runtimeStatus";
-import type { RuntimeSnapshotByHost, StackRuntimeItem, TagItem } from "./types";
+import type {
+  AgentConnectionInfo,
+  RuntimeSnapshotByHost,
+  StackRuntimeItem,
+  TagItem,
+} from "./types";
 
 export interface AppState {
   /** Harbor-теги, полученные через конкретного агента (ключ — имя хоста). */
@@ -17,7 +22,7 @@ export interface AppState {
     running: boolean;
     stacks: StackRuntimeItem[];
     stacksByHost: RuntimeSnapshotByHost;
-    agents: Record<string, string>;
+    agents: Record<string, AgentConnectionInfo>;
   };
   selectedTagView: string | null;
   query: string;
@@ -49,13 +54,17 @@ export type AppAction =
       running: boolean;
       stacks?: StackRuntimeItem[];
       stacksByHost?: RuntimeSnapshotByHost;
-      agents?: Record<string, string>;
+      agents?: Record<string, AgentConnectionInfo>;
     }
   | { type: "RUNTIME_HOST_UPDATED"; hostName: string; stacks: StackRuntimeItem[] }
   | { type: "RUNTIME_HOST_CLEARED"; hostName: string }
   | { type: "RUNTIME_SNAPSHOT_BY_HOST"; stacksByHost: RuntimeSnapshotByHost }
-  | { type: "AGENTS_SNAPSHOT"; agents: Record<string, string> }
-  | { type: "AGENT_UPDATED"; hostName: string; status: string | null }
+  | { type: "AGENTS_SNAPSHOT"; agents: Record<string, AgentConnectionInfo> }
+  | {
+      type: "AGENT_UPDATED";
+      hostName: string;
+      agent: AgentConnectionInfo | null;
+    }
   | { type: "QUERY_CHANGE"; query: string }
   | { type: "OPEN_SET"; open: boolean }
   | { type: "ACTION_ERROR_SET"; error: string | null }
@@ -162,8 +171,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
     case "AGENT_UPDATED": {
       const nextAgents = { ...state.status.agents };
-      if (action.status === null) delete nextAgents[action.hostName];
-      else nextAgents[action.hostName] = action.status;
+      if (action.agent === null) delete nextAgents[action.hostName];
+      else nextAgents[action.hostName] = action.agent;
       return {
         ...state,
         status: {

@@ -11,12 +11,12 @@ public sealed partial class AgentSessionStore
             return false;
 
         var snapshot = _agentsJsonFile.ReadSnapshot();
-        if (!snapshot.TryGetValue(normalizedHostName, out var status))
+        if (!snapshot.TryGetValue(normalizedHostName, out var info))
             return false;
 
         return string.Equals(
-            status,
-            AgentsJsonFile.StatusPasswordAccepted,
+            info.Status,
+            AgentConnectionStatusFile.StatusPasswordAccepted,
             StringComparison.Ordinal);
     }
 }

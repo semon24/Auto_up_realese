@@ -34,7 +34,7 @@ export function MainPage() {
   const acceptableHostsForTags = useMemo(
     () =>
       Object.entries(status.agents)
-        .filter(([, st]) => st === AGENT_STATUS_PASSWORD_ACCEPTED)
+        .filter(([, info]) => info.status === AGENT_STATUS_PASSWORD_ACCEPTED)
         .map(([hostName]) => hostName.trim())
         .filter((hostName) => hostName.length > 0)
         .sort(),

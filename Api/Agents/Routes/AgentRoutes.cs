@@ -13,7 +13,7 @@ public static class AgentRoutes
         app.MapPost("/api/agents/{hostName}/password", async (string hostName, 
         AgentPasswordBody? body, 
         AgentSessionStore sessions, 
-        AgentsJsonFile agentsJson, 
+        AgentConnectionStatusFile agentsJson, 
         IHubContext<UiHub> uiHubContext,
         CancellationToken ct) =>
         {
@@ -37,7 +37,7 @@ public static class AgentRoutes
             return Results.Json(new { ok = true });
         });
 
-        app.MapDelete("/api/agents/{hostName}", async (string hostName, AgentsJsonFile agentsJson, IHubContext<UiHub> uiHubContext, CancellationToken ct) =>
+        app.MapDelete("/api/agents/{hostName}", async (string hostName, AgentConnectionStatusFile agentsJson, IHubContext<UiHub> uiHubContext, CancellationToken ct) =>
         {
             if (!agentsJson.TryRemoveIfDisconnected(hostName, out var err))
                 return Results.Json(new { error = err }, statusCode: 400);

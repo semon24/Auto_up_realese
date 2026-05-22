@@ -1,12 +1,12 @@
 export const STATUS_POLL_MS = 8000;
 
-/** Как на сервере AgentsJsonFile.StatusWaitingForPassword */
+/** Как на сервере AgentConnectionStatusFile.StatusWaitingForPassword */
 export const AGENT_STATUS_WAITING_PASSWORD = "waiting for password";
 
-/** Как на сервере AgentsJsonFile.StatusPasswordAccepted */
+/** Как на сервере AgentConnectionStatusFile.StatusPasswordAccepted */
 export const AGENT_STATUS_PASSWORD_ACCEPTED = "password accepted";
 
-/** Как на сервере AgentsJsonFile.StatusDisconnected */
+/** Как на сервере AgentConnectionStatusFile.StatusDisconnected */
 export const AGENT_STATUS_DISCONNECTED = "disconnected";
 
 /**

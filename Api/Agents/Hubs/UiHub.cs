@@ -1,3 +1,4 @@
+using System.Net;
 using AutoUpRelease.Api;
 using AutoUpRelease.Api.Agents;
 using AutoUpRelease.Api.Agents.Json;
@@ -11,7 +12,7 @@ namespace AutoUpRelease.Api.Agents.Hubs;
 /// Сервер рассылает в UI через <see cref="IHubContext{UiHub}"/> (см. <see cref="PublishAgentUpdatedAsync"/>).
 /// </summary>
 public sealed class UiHub(
-    AgentsJsonFile agentsStatusJsonFile,
+    AgentConnectionStatusFile agentsStatusJsonFile,
     AgentServicesSnapshotStore snapshotStore,
     AgentSessionStore agentSessions,
     HarborTagsOrchestrator harborTagsOrchestrator) : Hub
@@ -21,7 +22,7 @@ public sealed class UiHub(
     static readonly TimeSpan SnapshotMaxAge = TimeSpan.FromSeconds(35);
 
     /// <summary>Текущее состояние агентов для первичной синхронизации клиента.</summary>
-    public IReadOnlyDictionary<string, string> GetAgentsSnapshot() => agentsStatusJsonFile.ReadSnapshot();
+    public IReadOnlyDictionary<string, AgentConnectionInfo> GetAgentsSnapshot() => agentsStatusJsonFile.ReadSnapshot();
 
     /// <summary>Актуальные runtime-снимки стеков по хостам агентов.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<RuntimeStackDto>> GetRuntimeSnapshot()
@@ -91,20 +92,22 @@ public sealed class UiHub(
     /// <summary>Рассылка <see cref="EventAgentUpdated"/> всем вкладкам UI из любого места приложения.</summary>
     public static Task PublishAgentUpdatedAsync(
         IHubContext<UiHub> uiHubContext,
-        AgentsJsonFile agentsJsonFile,
+        AgentConnectionStatusFile agentsJsonFile,
         string hostName,
         CancellationToken cancellationToken = default)
     {
         var normalizedHostName = hostName.Trim();
         var snapshot = agentsJsonFile.ReadSnapshot();
-        snapshot.TryGetValue(normalizedHostName, out var status);
+        snapshot.TryGetValue(normalizedHostName, out var info);
 
         return uiHubContext.Clients.All.SendAsync(
             EventAgentUpdated,
             new
             {
                 hostName = normalizedHostName,
-                status
+                status = info?.Status,
+                ipAddress = info?.IpAddress,
+                disconnectedAtUtc = info?.DisconnectedAtUtc
             },
             cancellationToken);
     }

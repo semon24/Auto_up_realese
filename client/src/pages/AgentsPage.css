@@ -6,7 +6,7 @@
   padding: 3rem 1.5rem 4rem;
   gap: 1.5rem;
   width: 100%;
-  max-width: 520px;
+  max-width: 720px;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -41,10 +41,63 @@
   cursor: pointer;
   width: 100%;
   box-sizing: border-box;
+  gap: 0.35rem;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.agents-page__card-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.agents-page__card-extra {
+  padding-top: 0.2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .agents-page__card--click:hover {
   filter: brightness(1.06);
+}
+
+.agents-page__meta {
+  color: #8b949e;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.agents-page__meta strong {
+  color: #c9d1d9;
+  font-weight: 600;
+}
+
+.agents-page__card-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.18rem;
+  position: relative;
+  padding-top: 0.3rem;
+}
+
+.agents-page__status {
+  color: #8b949e;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.agents-page__meta--version {
+  min-width: 0;
+}
+
+.agents-page__meta--version strong {
+  overflow-wrap: anywhere;
 }
 
 .agents-page__empty {

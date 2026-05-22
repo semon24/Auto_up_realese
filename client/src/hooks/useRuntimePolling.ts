@@ -9,6 +9,7 @@ import { errMessage } from "../apiClient";
 import { AGENT_STATUS_DISCONNECTED } from "../constants";
 import { dispatchApp } from "../store/appStore";
 import type {
+  AgentConnectionInfo,
   AgentUpdatedEvent,
   RuntimeSnapshotByHost,
   StatusUpdatedEvent,
@@ -104,7 +105,7 @@ export function useRuntimePolling() {
 
     const syncAgentsSnapshot = async () => {
       const snapshot =
-        await connection.invoke<Record<string, string>>("GetAgentsSnapshot");
+        await connection.invoke<Record<string, AgentConnectionInfo>>("GetAgentsSnapshot");
       dispatchApp({ type: "AGENTS_SNAPSHOT", agents: snapshot ?? {} });
     };
 
@@ -124,7 +125,14 @@ export function useRuntimePolling() {
       dispatchApp({
         type: "AGENT_UPDATED",
         hostName,
-        status: payload.status ?? null,
+        agent:
+          payload.status === null
+            ? null
+            : {
+                status: payload.status ?? "",
+                ipAddress: payload.ipAddress ?? null,
+                disconnectedAtUtc: payload.disconnectedAtUtc ?? null,
+              },
       });
       if (payload.status === AGENT_STATUS_DISCONNECTED) {
         dispatchApp({ type: "RUNTIME_HOST_CLEARED", hostName });

@@ -10,12 +10,12 @@ public sealed partial class AgentSessionStore
 {
     readonly ConcurrentDictionary<string, string> _connectionsByHost = new();
     readonly ConcurrentDictionary<string, string> _hostsByConnection = new();
-    readonly AgentsJsonFile _agentsJsonFile;
+    readonly AgentConnectionStatusFile _agentsJsonFile;
     readonly IHubContext<AgentHub> _agentHubContext;
     readonly IHubContext<UiHub> _uiHubContext;
 
     public AgentSessionStore(
-        AgentsJsonFile agentsStatusJsonFile,
+        AgentConnectionStatusFile agentsStatusJsonFile,
         IHubContext<AgentHub> agentHubContext,
         IHubContext<UiHub> uiHubContext)
     {
@@ -24,17 +24,20 @@ public sealed partial class AgentSessionStore
         _uiHubContext = uiHubContext;
     }
 
-    public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, CancellationToken cancellationToken)
+    public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, string? ipAddress, CancellationToken cancellationToken)
     {
         if (Normalize(hostName) is not { } normalizedHostName)
             throw new ArgumentException("hostName is required", nameof(hostName));
+
+        if (Normalize(ipAddress) is not { } normalizedIpAddress)
+            throw new ArgumentException("ipAddress is required", nameof(ipAddress)); 
 
         if (_connectionsByHost.TryGetValue(normalizedHostName, out var previousConnectionId))
             _hostsByConnection.TryRemove(previousConnectionId, out _);
         _connectionsByHost[normalizedHostName] = connectionId;
         _hostsByConnection[connectionId] = normalizedHostName;
         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] агент подключился: {normalizedHostName}");
-        _agentsJsonFile.UpsertOnAgentConnected(normalizedHostName);
+        _agentsJsonFile.UpdateStatusOnConnect(normalizedHostName, normalizedIpAddress);
         return UiHub.PublishAgentUpdatedAsync(_uiHubContext, _agentsJsonFile, normalizedHostName, cancellationToken);
     }
 

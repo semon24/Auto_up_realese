@@ -2,7 +2,7 @@
 // Формат: один JSON-объект, ключ — имя хоста агента (как в WebSocket ?hostName=... и AGENT_HOST_NAME на агенте),
 // значение — строка статуса для UI и логики API.
 //
-// Возможные значения статуса (как в AgentsJsonFile):
+// Возможные значения статуса (как в AgentConnectionStatusFile):
 //   "waiting for password" — агент подключён по WebSocket, ждём ввод пароля в UI
 //   "password accepted"    — пароль подтверждён агентом, можно считать сессию «вошедшей»
 //   "disconnected"         — после «password accepted» сокет закрылся; при новом WS снова «password accepted» без пароля

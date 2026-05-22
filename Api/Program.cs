@@ -40,7 +40,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton(sp =>
 {
     var o = sp.GetRequiredService<ResolvedAppOptions>();
-    return new AgentsJsonFile(o.AgentsJsonPath);
+    return new AgentConnectionStatusFile(o.AgentsJsonPath);
 });
 builder.Services.AddSingleton<AgentServicesSnapshotStore>();
 builder.Services.AddSingleton<AgentSessionStore>();
