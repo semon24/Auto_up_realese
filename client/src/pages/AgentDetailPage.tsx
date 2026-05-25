@@ -24,6 +24,21 @@ interface DockerComposeUpResponse {
   payload?: DockerComposeUpPayload;
 }
 
+interface ManagedProjectOverride {
+  tag: string;
+  running: boolean;
+  operationStatus: string;
+}
+
+function isPendingOperationStatus(status?: string | null) {
+  return (
+    status === "in_progress" ||
+    status === "deleting" ||
+    status === "stopping" ||
+    status === "starting"
+  );
+}
+
 export function AgentDetailPage() {
   const { hostName: hostNameParam, tag: tagParam } = useParams();
   const navigate = useNavigate();
@@ -86,7 +101,10 @@ export function AgentDetailPage() {
   const [launchLinks, setLaunchLinks] = useState<ServiceLinks | null>(null);
   const [isLaunchPanelOpen, setIsLaunchPanelOpen] = useState(false);
   const [lastStartedTag, setLastStartedTag] = useState<string | null>(null);
+  const [managedProjectOverride, setManagedProjectOverride] = useState<ManagedProjectOverride | null>(null);
+  const [pausingProject, setPausingProject] = useState(false);
   const [stoppingProject, setStoppingProject] = useState(false);
+  const [restartingProject, setRestartingProject] = useState(false);
   const isTagRoute = selectedTagFromRoute.length > 0;
 
   const needsPassword = agentStatus === AGENT_STATUS_WAITING_PASSWORD;
@@ -94,7 +112,7 @@ export function AgentDetailPage() {
   const isManagementLocked = needsPassword || isDisconnected;
   const runningTagFromStatus = useMemo(() => {
     const runningStack = agentStacks.find(
-      (s) => s.running || s.operationStatus === "in_progress"
+      (s) => s.running || isPendingOperationStatus(s.operationStatus)
     );
     return runningStack?.tag ?? null;
   }, [agentStacks]);
@@ -103,6 +121,14 @@ export function AgentDetailPage() {
     () => agentStacks.find((stack) => stack.tag === managedTag) ?? null,
     [managedTag, agentStacks]
   );
+  const effectiveManagedRunning =
+    managedProjectOverride?.tag === managedTag
+      ? managedProjectOverride.running
+      : !!managedStack?.running;
+  const effectiveManagedOperationStatus =
+    managedProjectOverride?.tag === managedTag
+      ? managedProjectOverride.operationStatus
+      : managedStack?.operationStatus ?? null;
   const agentTags = useMemo(
     () =>
       Array.from(
@@ -127,21 +153,44 @@ export function AgentDetailPage() {
     [managedLinks]
   );
   const isManagedProjectLoading =
-    launching || managedStack?.operationStatus === "in_progress";
+    launching || isPendingOperationStatus(effectiveManagedOperationStatus);
+  const hasManagedProject = !!managedStack;
+  const isManagedProjectRunning = effectiveManagedRunning;
   const isManagedProjectReady =
-    !!managedStack &&
-    managedStack.running &&
-    managedStack.operationStatus !== "in_progress";
+    hasManagedProject &&
+    effectiveManagedRunning &&
+    !isPendingOperationStatus(effectiveManagedOperationStatus);
   const managedOperationStatus =
-    managedStack?.operationStatus ??
+    effectiveManagedOperationStatus ??
     (isManagedProjectLoading ? "in_progress" : "нет данных");
   const managedOperationStatusClassName =
     managedOperationStatus === "success"
       ? "agent-detail__status-line agent-detail__status-line--success"
-      : managedOperationStatus === "in_progress"
+      : isPendingOperationStatus(managedOperationStatus)
         ? "agent-detail__status-line agent-detail__status-line--progress"
         : "agent-detail__status-line";
   const shouldShowManagedLinks = isManagedProjectReady && linkEntries.length > 0;
+  const isProjectActionPending =
+    pausingProject || stoppingProject || restartingProject;
+  const shouldRenderPauseAction =
+    isManagedProjectRunning || isPendingOperationStatus(effectiveManagedOperationStatus);
+  const canRestartManagedProject =
+    hasManagedProject &&
+    isManagedProjectRunning &&
+    !isManagedProjectLoading &&
+    !isProjectActionPending;
+  const canPauseManagedProject =
+    hasManagedProject &&
+    isManagedProjectRunning &&
+    !isManagedProjectLoading &&
+    !isProjectActionPending;
+  const canStartManagedProject =
+    hasManagedProject &&
+    !isManagedProjectRunning &&
+    !isManagedProjectLoading &&
+    !isProjectActionPending;
+  const canDeleteManagedProject =
+    hasManagedProject && !isManagedProjectLoading && !isProjectActionPending;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -191,9 +240,10 @@ export function AgentDetailPage() {
     setLaunchOk(null);
     setLaunchLinks(null);
     if (!launchTag.trim()) {
-      setLaunchError("Введите тег для запуска");
+    setLaunchError("Введите тег для запуска");
       return;
     }
+    setManagedProjectOverride(null);
     setLaunching(true);
     try {
       const res = await api<DockerComposeUpResponse>(
@@ -223,16 +273,17 @@ export function AgentDetailPage() {
     if (!managedTag) return;
     setLaunchError(null);
     setLaunchOk(null);
+    setManagedProjectOverride(null);
     setStoppingProject(true);
     try {
       await api<{ ok?: boolean }>(
         `/api/agents/${encodeURIComponent(hostName)}/docker-compose-down`,
         {
-        method: "POST",
-        body: JSON.stringify({ tag: managedTag }),
+          method: "POST",
+          body: JSON.stringify({ tag: managedTag }),
         }
       );
-      setLaunchOk(`Проект ${managedTag} остановлен.`);
+      setLaunchOk(`Проект ${managedTag} выключен.`);
       setLastStartedTag(null);
       setLaunchLinks(null);
       if (isTagRoute) {
@@ -243,6 +294,86 @@ export function AgentDetailPage() {
       setLaunchError(errMessage(err));
     } finally {
       setStoppingProject(false);
+    }
+  }
+
+  async function onPauseManagedProject() {
+    if (!managedTag) return;
+    setLaunchError(null);
+    setLaunchOk(null);
+    setManagedProjectOverride(null);
+    setPausingProject(true);
+    try {
+      await api<{ ok?: boolean }>(
+        `/api/agents/${encodeURIComponent(hostName)}/docker-compose-stop`,
+        {
+          method: "POST",
+          body: JSON.stringify({ tag: managedTag }),
+        }
+      );
+      setLaunchOk(`Проект ${managedTag} остановлен.`);
+      setManagedProjectOverride({
+        tag: managedTag,
+        running: false,
+        operationStatus: "success",
+      });
+      await loadStatus();
+    } catch (err) {
+      setLaunchError(errMessage(err));
+    } finally {
+      setPausingProject(false);
+    }
+  }
+
+  async function onStartManagedProject() {
+    if (!managedTag) return;
+    setLaunchError(null);
+    setLaunchOk(null);
+    setManagedProjectOverride(null);
+    setPausingProject(true);
+    try {
+      const res = await api<DockerComposeUpResponse>(
+        `/api/agents/${encodeURIComponent(hostName)}/docker-compose-up`,
+        {
+          method: "POST",
+          body: JSON.stringify({ tag: managedTag }),
+        }
+      );
+      setLaunchOk(`Проект ${managedTag} поднимается.`);
+      setLaunchLinks(res.payload?.serviceLinks ?? null);
+      setManagedProjectOverride({
+        tag: managedTag,
+        running: true,
+        operationStatus: "in_progress",
+      });
+      await loadStatus();
+    } catch (err) {
+      setLaunchError(errMessage(err));
+    } finally {
+      setPausingProject(false);
+    }
+  }
+
+  async function onRestartManagedProject() {
+    if (!managedTag) return;
+    setLaunchError(null);
+    setLaunchOk(null);
+    setManagedProjectOverride(null);
+    setRestartingProject(true);
+    try {
+      await api<{ ok?: boolean }>(
+        `/api/agents/${encodeURIComponent(hostName)}/docker-compose-restart`,
+        {
+          method: "POST",
+          body: JSON.stringify({ tag: managedTag }),
+        }
+      );
+      setLaunchOk(`Проект ${managedTag} перезапущен.`);
+      await loadStatus();
+    } catch (err) {
+      setLaunchError(errMessage(err));
+    } finally {
+      setRestartingProject(false);
     }
   }
 
@@ -434,18 +565,26 @@ export function AgentDetailPage() {
                       const stackForTag =
                         agentStacks.find((stack) => stack.tag === tag) ?? null;
                       const isInProgressTag =
-                        stackForTag?.operationStatus === "in_progress";
+                        isPendingOperationStatus(stackForTag?.operationStatus);
                       const isSuccessTag =
-                        stackForTag?.operationStatus === "success";
+                        stackForTag?.operationStatus === "success" && !!stackForTag?.running;
+                      const isStoppedTag =
+                        !isInProgressTag &&
+                        !!stackForTag &&
+                        !stackForTag.running;
                       const tagCardClassName = isInProgressTag
                         ? "agent-detail__tag-card agent-detail__tag-card--progress"
                         : isSuccessTag
                           ? "agent-detail__tag-card agent-detail__tag-card--active"
+                          : isStoppedTag
+                            ? "agent-detail__tag-card agent-detail__tag-card--stopped"
                           : "agent-detail__tag-card";
                       const tagButtonClassName = isInProgressTag
                         ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--progress"
                         : isSuccessTag
                           ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--active"
+                          : isStoppedTag
+                            ? "agent-detail__tag-nav-btn agent-detail__tag-nav-btn--stopped"
                           : "agent-detail__tag-nav-btn";
 
                       return (
@@ -542,14 +681,46 @@ export function AgentDetailPage() {
             </div>
           )}
 
-          <button
-            type="button"
-            className="agent-detail__stop-project"
-            disabled={stoppingProject || isManagedProjectLoading || !isManagedProjectReady}
-            onClick={() => void onStopManagedProject()}
-          >
-            {stoppingProject ? "Останавливаем..." : "Выключить проект"}
-          </button>
+          <div className="agent-detail__project-actions">
+            <button
+              type="button"
+              className="agent-detail__restart-project"
+              disabled={!canRestartManagedProject}
+              onClick={() => void onRestartManagedProject()}
+            >
+              {restartingProject ? "Перезагружаем..." : "Перезагрузить проект"}
+            </button>
+            <button
+              type="button"
+              className={
+                shouldRenderPauseAction
+                  ? "agent-detail__pause-project"
+                  : "agent-detail__pause-project agent-detail__pause-project--start"
+              }
+              disabled={!(isManagedProjectRunning ? canPauseManagedProject : canStartManagedProject)}
+              onClick={() =>
+                void (isManagedProjectRunning
+                  ? onPauseManagedProject()
+                  : onStartManagedProject())
+              }
+            >
+              {pausingProject
+                ? shouldRenderPauseAction
+                  ? "Останавливаем..."
+                  : "Поднимаем..."
+                : shouldRenderPauseAction
+                  ? "Остановить проект"
+                  : "Поднять проект"}
+            </button>
+            <button
+              type="button"
+              className="agent-detail__stop-project"
+              disabled={!canDeleteManagedProject}
+              onClick={() => void onStopManagedProject()}
+            >
+              {stoppingProject ? "Выключаем..." : "Выключить проект"}
+            </button>
+          </div>
         </section>
       )}
     </div>

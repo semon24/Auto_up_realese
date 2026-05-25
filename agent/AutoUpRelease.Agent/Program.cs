@@ -1,4 +1,6 @@
 using AutoUpRelease.Agent;
+using AutoUpRelease.Agent.Services.DeleteStackService;
+using AutoUpRelease.Agent.Services.RestartStackService;
 using AutoUpRelease.Agent.Services.StartStackService;
 using AutoUpRelease.Agent.Services.StopStackService;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,6 +9,8 @@ using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddSingleton<StartStackService>();
+builder.Services.AddSingleton<DeleteStackService>();
+builder.Services.AddSingleton<RestartStackService>();
 builder.Services.AddSingleton<StopStackService>();
 builder.Services.AddHostedService<AgentWorker>();
 builder.Services.AddOptions<AppOptions>()

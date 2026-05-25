@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.SignalR.Client;
-using AutoUpRelease.Agent.Services.StopStackService;
+using AutoUpRelease.Agent.Services.DeleteStackService;
 
 namespace AutoUpRelease.Agent.Commands;
 
@@ -8,7 +8,7 @@ internal static class DockerComposeDownSignalRMessages
     const string ClientMethodDockerComposeDown = "docker_compose_down";
     const string ServerMethodDockerComposeDownCompleted = "DockerComposeDownCompleted";
 
-    internal static void Register(HubConnection connection, StopStackService stopStackService)
+    internal static void Register(HubConnection connection, DeleteStackService deleteStackService)
     {
         connection.On<DockerComposeDownRequest>(
             ClientMethodDockerComposeDown,
@@ -20,19 +20,19 @@ internal static class DockerComposeDownSignalRMessages
                 Console.WriteLine(
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_down: id={request.Id}, tag={request.Tag?.Trim() ?? "<null>"}");
 
-                _ = RunDockerComposeDownAsync(connection, stopStackService, request);
+                _ = RunDockerComposeDownAsync(connection, deleteStackService, request);
                 return Task.CompletedTask;
             });
     }
 
     static async Task RunDockerComposeDownAsync(
         HubConnection connection,
-        StopStackService stopStackService,
+        DeleteStackService deleteStackService,
         DockerComposeDownRequest request)
     {
         try
         {
-            var result = await stopStackService.ExecuteAsync(
+            var result = await deleteStackService.ExecuteAsync(
                 request.Tag,
                 CancellationToken.None);
 

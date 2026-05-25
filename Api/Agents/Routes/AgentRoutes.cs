@@ -89,6 +89,50 @@ public static class AgentRoutes
             return Results.Json(new { ok = true, payload });
         });
 
+        app.MapPost("/api/agents/{hostName}/docker-compose-restart", async (
+            string hostName,
+            StartBody? body,
+            AgentSessionStore sessions,
+            CancellationToken ct) =>
+        {
+            var tag = body?.Tag?.Trim();
+            if (string.IsNullOrEmpty(tag))
+                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+
+            var (ok, error, payload) = await sessions.StartDockerComposeRestartWithAgentAsync(
+                hostName,
+                tag,
+                TimeSpan.FromMinutes(15),
+                ct);
+
+            if (!ok)
+                return Results.Json(new { error = error ?? "Ошибка рестарта на агенте" }, statusCode: 400);
+
+            return Results.Json(new { ok = true, payload });
+        });
+
+        app.MapPost("/api/agents/{hostName}/docker-compose-stop", async (
+            string hostName,
+            StartBody? body,
+            AgentSessionStore sessions,
+            CancellationToken ct) =>
+        {
+            var tag = body?.Tag?.Trim();
+            if (string.IsNullOrEmpty(tag))
+                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+
+            var (ok, error, payload) = await sessions.StartDockerComposeStopWithAgentAsync(
+                hostName,
+                tag,
+                TimeSpan.FromMinutes(15),
+                ct);
+
+            if (!ok)
+                return Results.Json(new { error = error ?? "Ошибка остановки на агенте" }, statusCode: 400);
+
+            return Results.Json(new { ok = true, payload });
+        });
+
         return app;
     }
 }

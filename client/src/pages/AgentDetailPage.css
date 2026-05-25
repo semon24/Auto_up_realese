@@ -247,6 +247,12 @@
   background: linear-gradient(135deg, rgba(47, 129, 247, 0.28), rgba(35, 134, 54, 0.22));
 }
 
+.agent-detail__add-project:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .agent-detail__launch-feedback {
   display: flex;
   flex-direction: column;
@@ -274,6 +280,10 @@
   color: #e6edf3;
 }
 
+.agent-detail__tag-nav-btn--stopped {
+  color: #adb6c2;
+}
+
 .agent-detail__tag-nav-btn--progress {
   color: #f0c674;
 }
@@ -298,6 +308,11 @@
 .agent-detail__tag-card--active {
   border-color: #2ea043;
   background: rgba(63, 185, 80, 0.16);
+}
+
+.agent-detail__tag-card--stopped {
+  border-color: #6e7681;
+  background: rgba(110, 118, 129, 0.14);
 }
 
 .agent-detail__tag-card--progress {
@@ -366,6 +381,17 @@
   justify-content: center;
 }
 
+.agent-detail__project-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.agent-detail__restart-project,
+.agent-detail__pause-project,
 .agent-detail__stop-project {
   padding: 0.6rem 0.8rem;
   border-radius: 8px;
@@ -373,13 +399,32 @@
   cursor: pointer;
 }
 
+.agent-detail__restart-project {
+  border: 1px solid #2f81f7;
+  background: rgba(47, 129, 247, 0.14);
+  color: #58a6ff;
+}
+
+.agent-detail__pause-project {
+  border: 1px solid #d29922;
+  background: rgba(210, 153, 34, 0.16);
+  color: #f0c674;
+}
+
+.agent-detail__pause-project--start {
+  border-color: #2ea043;
+  background: rgba(46, 160, 67, 0.18);
+  color: #e6edf3;
+}
+
 .agent-detail__stop-project {
   border: 1px solid #da3633;
   background: rgba(218, 54, 51, 0.15);
   color: #f85149;
-  margin-top: auto;
 }
 
+.agent-detail__restart-project:disabled,
+.agent-detail__pause-project:disabled,
 .agent-detail__stop-project:disabled {
   opacity: 0.65;
   cursor: not-allowed;
@@ -413,4 +458,11 @@
 
 .agent-detail__link-item:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .agent-detail__project-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

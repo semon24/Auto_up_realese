@@ -2,8 +2,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
 using AutoUpRelease.Agent.Commands;
+using AutoUpRelease.Agent.Services.DeleteStackService;
+using AutoUpRelease.Agent.Services.RestartStackService;
 using AutoUpRelease.Agent.Services.StartStackService;
 using AutoUpRelease.Agent.Services.StopStackService;
+
 
 namespace AutoUpRelease.Agent;
 
@@ -13,15 +16,22 @@ public sealed class AgentWorker : BackgroundService
 
     private readonly AppOptions _appOptions;
     private readonly StartStackService _startStackService;
+    private readonly DeleteStackService _deleteStackService;
+    private readonly RestartStackService _restartStackService;
+
     private readonly StopStackService _stopStackService;
 
     public AgentWorker(
         IOptions<AppOptions> appOptions,
         StartStackService startStackService,
+        DeleteStackService deleteStackService,
+        RestartStackService restartStackService,
         StopStackService stopStackService)
     {
         _appOptions = appOptions.Value;
         _startStackService = startStackService;
+        _deleteStackService = deleteStackService;
+        _restartStackService = restartStackService;
         _stopStackService = stopStackService;
     }
 
@@ -76,7 +86,9 @@ public sealed class AgentWorker : BackgroundService
 
         AgentSignalRPasswordMessages.Register(connection, _appOptions);
         DockerComposeUpSignalRMessages.Register(connection, _startStackService);
-        DockerComposeDownSignalRMessages.Register(connection, _stopStackService);
+        DockerComposeDownSignalRMessages.Register(connection, _deleteStackService);
+        DockerComposeRestartSignalRMessages.Register(connection, _restartStackService);
+        DockerComposeStopSignalRMessages.Register(connection, _stopStackService);
         UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
         try
         {

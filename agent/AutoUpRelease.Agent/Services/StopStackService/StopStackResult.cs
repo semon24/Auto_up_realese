@@ -4,10 +4,12 @@ public sealed class StopStackResult
 {
     public bool Ok { get; init; }
     public string? Error { get; init; }
+    public object? Payload { get; init; }
 
-    public static StopStackResult OkResult() => new()
+    public static StopStackResult OkResult(object? payload = null) => new()
     {
-        Ok = true
+        Ok = true,
+        Payload = payload
     };
 
     public static StopStackResult Fail(string error) => new()
