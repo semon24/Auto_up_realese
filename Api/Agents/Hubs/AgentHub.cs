@@ -21,6 +21,7 @@ public sealed class AgentHub(
     {
         var httpContext = Context.GetHttpContext();
         var hostName = Context.GetHttpContext()?.Request.Query["hostName"].FirstOrDefault();
+        var agentType = Context.GetHttpContext()?.Request.Query["type"].FirstOrDefault();
         var ipAddress = httpContext?.Connection.RemoteIpAddress?.ToString();
         if (string.IsNullOrWhiteSpace(hostName))
         {
@@ -43,6 +44,7 @@ public sealed class AgentHub(
             hostName,
             Context.ConnectionId,
             ipAddress,
+            agentType,
             Context.ConnectionAborted);
 
         await base.OnConnectedAsync();
@@ -91,6 +93,18 @@ public sealed class AgentHub(
     public Task DockerComposeStopCompleted(string id, bool ok, string? error, object? payload)
     {
         sessions.HandleDockerComposeStopCompleted(Context.ConnectionId, id, ok, error, payload);
+        return Task.CompletedTask;
+    }
+
+    public Task AddDomainsCompleted(string id, bool ok, string? error, object? payload)
+    {
+        sessions.HandleAddDomainsCompleted(Context.ConnectionId, id, ok, error, payload);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteDomainsCompleted(string id, bool ok, string? error, object? payload)
+    {
+        sessions.HandleDeleteDomainsCompleted(Context.ConnectionId, id, ok, error, payload);
         return Task.CompletedTask;
     }
 

@@ -10,6 +10,9 @@ public sealed class AppOptions
     [ConfigurationKeyName("AGENT_HOST_NAME")]
     public string AgentHostName { get; set; }
 
+    [ConfigurationKeyName("TYPE")]
+    public string Type { get; set; } = "";
+
     [ConfigurationKeyName("AGENT_RECONNECT_SECONDS")]
     public string AgentReconnectSeconds { get; set; }
 

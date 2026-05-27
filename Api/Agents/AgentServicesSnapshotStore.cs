@@ -86,6 +86,8 @@ public sealed class AgentServicesSnapshotStore
             var operationStatus = GetString(stack, "operationStatus");
             var operationError = GetString(stack, "operationError");
             var serviceLinks = ParseServiceLinks(stack);
+            var serviceDomains = ParseStringArray(stack, "serviceDomains");
+
 
             result[tag] = new StackSnapshot
             {
@@ -94,6 +96,7 @@ public sealed class AgentServicesSnapshotStore
                 OperationStatus = operationStatus,
                 OperationError = operationError,
                 ServiceLinks = serviceLinks,
+                ServiceDomains = serviceDomains,
                 Services = services
             };
         }
@@ -128,6 +131,30 @@ public sealed class AgentServicesSnapshotStore
         }
 
         return result;
+    }
+
+    static List<string>? ParseStringArray(JsonElement stackElement, string propertyName)
+    {
+        if (!TryGetAnyProperty(stackElement, out var arrayElement, propertyName))
+            return null;
+
+        if (arrayElement.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var result = new List<string>();
+        foreach (var item in arrayElement.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+                continue;
+
+            var value = item.GetString()?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            result.Add(value);
+        }
+
+        return result.Count == 0 ? null : result;
     }
 
     static bool GetBoolean(JsonElement element, string propertyName)
@@ -211,4 +238,6 @@ public sealed class StackSnapshot
     public string? OperationError { get; init; }
     public Dictionary<string, string>? ServiceLinks { get; init; }
     public Dictionary<string, DockerServiceState> Services { get; init; } = new(StringComparer.Ordinal);
+    public List<string>? ServiceDomains { get; init; }
+    public IReadOnlyList<SslCertificateInfo>? Certificates { get; init; }
 }

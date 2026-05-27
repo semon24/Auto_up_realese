@@ -31,13 +31,14 @@ public sealed class AgentConnectionStatusFile
     /// Агент открыл WebSocket: новый хост или после «waiting for password» → «waiting for password»;
     /// после «password accepted» / «disconnected» → сразу «password accepted» (повторный ввод пароля не нужен).
     /// </summary>
-    public void UpdateStatusOnConnect(string hostName, string? ipAddress)
+    public void UpdateStatusOnConnect(string hostName, string? ipAddress, string? agentType)
     {
         if (_path is null) return;
 
         lock (_lock)
         {
             var map = ReadMap(_path);
+            var normalizedType = NormalizeAgentType(agentType);
 
             if (map.TryGetValue(hostName, out var st))
             {
@@ -48,6 +49,7 @@ public sealed class AgentConnectionStatusFile
                         : StatusWaitingForPassword;
 
                 st.IpAddress = ipAddress;
+                st.Type = normalizedType;
                 st.DisconnectedAtUtc = null;
             }
             else
@@ -55,6 +57,7 @@ public sealed class AgentConnectionStatusFile
                 map[hostName] = new AgentConnectionInfo
                 {
                     Status = StatusWaitingForPassword,
+                    Type = normalizedType,
                     IpAddress = ipAddress,
                     DisconnectedAtUtc = null
                 };
@@ -181,6 +184,33 @@ public sealed class AgentConnectionStatusFile
         return true;
     }
 
+    public bool TryGet(string hostName, out AgentConnectionInfo? info)
+    {
+        info = null;
+        if (_path is null)
+            return false;
+
+        var key = hostName.Trim();
+        if (string.IsNullOrEmpty(key))
+            return false;
+
+        lock (_lock)
+        {
+            var map = ReadMap(_path);
+            if (!map.TryGetValue(key, out var entry))
+                return false;
+
+            info = new AgentConnectionInfo
+            {
+                Status = entry.Status,
+                Type = entry.Type,
+                IpAddress = entry.IpAddress,
+                DisconnectedAtUtc = entry.DisconnectedAtUtc,
+            };
+            return true;
+        }
+    }
+
     static Dictionary<string, AgentConnectionInfo> ReadMap(string path)
     {
         if (!File.Exists(path))
@@ -207,4 +237,9 @@ public sealed class AgentConnectionStatusFile
         File.WriteAllText(path, json);
     }
 
+    static string NormalizeAgentType(string? agentType)
+    {
+        var normalized = agentType?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? "default" : normalized.ToLowerInvariant();
+    }
 }

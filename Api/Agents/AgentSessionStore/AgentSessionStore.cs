@@ -24,7 +24,7 @@ public sealed partial class AgentSessionStore
         _uiHubContext = uiHubContext;
     }
 
-    public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, string? ipAddress, CancellationToken cancellationToken)
+    public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, string? ipAddress, string? agentType, CancellationToken cancellationToken)
     {
         if (Normalize(hostName) is not { } normalizedHostName)
             throw new ArgumentException("hostName is required", nameof(hostName));
@@ -37,7 +37,7 @@ public sealed partial class AgentSessionStore
         _connectionsByHost[normalizedHostName] = connectionId;
         _hostsByConnection[connectionId] = normalizedHostName;
         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] агент подключился: {normalizedHostName}");
-        _agentsJsonFile.UpdateStatusOnConnect(normalizedHostName, normalizedIpAddress);
+        _agentsJsonFile.UpdateStatusOnConnect(normalizedHostName, normalizedIpAddress, agentType);
         return UiHub.PublishAgentUpdatedAsync(_uiHubContext, _agentsJsonFile, normalizedHostName, cancellationToken);
     }
 
@@ -81,6 +81,8 @@ public sealed partial class AgentSessionStore
             down.Tcs.TrySetCanceled();
         if (_dockerComposeRestartWaiters.TryRemove(normalizedHostName, out var restart))
             restart.Tcs.TrySetCanceled();
+        if (_deleteDomainWaiters.TryRemove(normalizedHostName, out var deleteDomain))
+            deleteDomain.Tcs.TrySetCanceled();
     }
 
     static string? Normalize(string? hostName)

@@ -2,6 +2,7 @@ using System.Net;
 using AutoUpRelease.Api;
 using AutoUpRelease.Api.Agents;
 using AutoUpRelease.Api.Agents.Json;
+using AutoUpRelease.Api.Ssl;
 using Microsoft.AspNetCore.SignalR;
 
 namespace AutoUpRelease.Api.Agents.Hubs;
@@ -14,6 +15,8 @@ namespace AutoUpRelease.Api.Agents.Hubs;
 public sealed class UiHub(
     AgentConnectionStatusFile agentsStatusJsonFile,
     AgentServicesSnapshotStore snapshotStore,
+    SslCertificateStore sslCertificateStore,
+    SslCertificateRefreshService sslCertificateRefreshService,
     AgentSessionStore agentSessions,
     HarborTagsOrchestrator harborTagsOrchestrator) : Hub
 {
@@ -25,15 +28,29 @@ public sealed class UiHub(
     public IReadOnlyDictionary<string, AgentConnectionInfo> GetAgentsSnapshot() => agentsStatusJsonFile.ReadSnapshot();
 
     /// <summary>Актуальные runtime-снимки стеков по хостам агентов.</summary>
-    public IReadOnlyDictionary<string, IReadOnlyList<RuntimeStackDto>> GetRuntimeSnapshot()
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<RuntimeStackDto>>> GetRuntimeSnapshot()
     {
+        try
+        {
+            await sslCertificateRefreshService.RefreshAllAsync(Context.ConnectionAborted);
+        }
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] GetRuntimeSnapshot SSL refresh error: {ex.Message}");
+        }
+
         var byHost = snapshotStore.GetFreshStacksByHost(SnapshotMaxAge);
         var result = new Dictionary<string, IReadOnlyList<RuntimeStackDto>>(StringComparer.Ordinal);
         foreach (var hostEntry in byHost)
         {
             var stacks = new List<RuntimeStackDto>(hostEntry.Value.Count);
             foreach (var stackEntry in hostEntry.Value)
-                stacks.Add(ToRuntimeStackDto(stackEntry.Key, stackEntry.Value));
+                stacks.Add(ToRuntimeStackDto(hostEntry.Key, stackEntry.Key, stackEntry.Value, sslCertificateStore));
             result[hostEntry.Key] = stacks;
         }
 
@@ -76,7 +93,24 @@ public sealed class UiHub(
         return result.Items;
     }
 
-    static RuntimeStackDto ToRuntimeStackDto(string tag, StackSnapshot snapshot) =>
+    static RuntimeStackDto ToRuntimeStackDto(
+        string hostName,
+        string tag,
+        StackSnapshot snapshot,
+        SslCertificateStore sslCertificateStore)
+    {
+        var activeDomains = new HashSet<string>(
+            (snapshot.ServiceDomains ?? [])
+                .Where(domain => !string.IsNullOrWhiteSpace(domain))
+                .Select(domain => domain.Trim().ToLowerInvariant()),
+            StringComparer.Ordinal);
+
+        var certificates = sslCertificateStore
+            .GetCertificates(hostName, tag)
+            .Where(certificate => activeDomains.Contains(certificate.Domain.Trim().ToLowerInvariant()))
+            .ToArray();
+
+        return
         new(
             tag,
             snapshot.Running,
@@ -84,10 +118,13 @@ public sealed class UiHub(
             snapshot.OperationStatus,
             snapshot.OperationError,
             snapshot.ServiceLinks,
+            snapshot.ServiceDomains,
             snapshot.Services.ToDictionary(
                 kv => kv.Key,
                 kv => new RuntimeServiceDto(kv.Value.State, kv.Value.Health),
-                StringComparer.Ordinal));
+                StringComparer.Ordinal),
+            certificates);
+    }
 
     /// <summary>Рассылка <see cref="EventAgentUpdated"/> всем вкладкам UI из любого места приложения.</summary>
     public static Task PublishAgentUpdatedAsync(
@@ -106,6 +143,7 @@ public sealed class UiHub(
             {
                 hostName = normalizedHostName,
                 status = info?.Status,
+                type = info?.Type,
                 ipAddress = info?.IpAddress,
                 disconnectedAtUtc = info?.DisconnectedAtUtc
             },
@@ -120,6 +158,8 @@ public sealed record RuntimeStackDto(
     string? OperationStatus,
     string? OperationError,
     IReadOnlyDictionary<string, string>? ServiceLinks,
-    IReadOnlyDictionary<string, RuntimeServiceDto> Services);
+    IReadOnlyList<string>? ServiceDomains,
+    IReadOnlyDictionary<string, RuntimeServiceDto> Services,
+    IReadOnlyList<SslCertificateInfo>? Certificates);
 
 public sealed record RuntimeServiceDto(string State, string? Health);

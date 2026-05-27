@@ -2,6 +2,7 @@ using AutoUpRelease.Agent;
 using AutoUpRelease.Agent.Services.DeleteStackService;
 using AutoUpRelease.Agent.Services.RestartStackService;
 using AutoUpRelease.Agent.Services.StartStackService;
+using AutoUpRelease.Agent.Services.StaleStartRecoveryService;
 using AutoUpRelease.Agent.Services.StopStackService;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,10 +13,12 @@ builder.Services.AddSingleton<StartStackService>();
 builder.Services.AddSingleton<DeleteStackService>();
 builder.Services.AddSingleton<RestartStackService>();
 builder.Services.AddSingleton<StopStackService>();
+builder.Services.AddSingleton<StaleStartRecoveryService>();
 builder.Services.AddHostedService<AgentWorker>();
 builder.Services.AddOptions<AppOptions>()
     .Bind(builder.Configuration)
     .PostConfigure(o => o.AgentHostName = o.AgentHostName?.Trim() ?? string.Empty)
+    .PostConfigure(o => o.Type = o.Type?.Trim() ?? string.Empty)
     .Validate(o => !string.IsNullOrWhiteSpace(o.ServerBackendUrl), "SERVER_BACKEND_URL is required")
     .Validate(o => !string.IsNullOrWhiteSpace(o.AgentHostName), "AGENT_HOST_NAME is required")
     .Validate(o => !string.IsNullOrWhiteSpace(o.AgentReconnectSeconds), "AGENT_RECONNECT_SECONDS is required")

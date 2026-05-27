@@ -14,7 +14,6 @@ import type {
   RuntimeSnapshotByHost,
   StatusUpdatedEvent,
 } from "../types";
-import { parseStatusUpdatedEvent } from "../utils/runtimeStatus";
 
 function mapRuntimeSnapshotByHost(
   snapshot: RuntimeSnapshotByHost | null | undefined
@@ -110,13 +109,9 @@ export function useRuntimePolling() {
     };
 
     const applyStatusUpdated = (payload: StatusUpdatedEvent) => {
-      const parsed = parseStatusUpdatedEvent(payload);
-      if (!parsed) return;
-      dispatchApp({
-        type: "RUNTIME_HOST_UPDATED",
-        hostName: parsed.hostName,
-        stacks: parsed.stacks,
-      });
+      const hostName = payload.hostName?.trim();
+      if (!hostName) return;
+      void syncRuntimeSnapshot(connection);
     };
 
     connection.on("agent_updated", (payload: AgentUpdatedEvent) => {
@@ -130,6 +125,7 @@ export function useRuntimePolling() {
             ? null
             : {
                 status: payload.status ?? "",
+                type: payload.type ?? null,
                 ipAddress: payload.ipAddress ?? null,
                 disconnectedAtUtc: payload.disconnectedAtUtc ?? null,
               },

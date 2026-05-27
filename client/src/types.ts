@@ -15,6 +15,7 @@ export interface ServiceLinks {
 
 export interface AgentConnectionInfo {
   status: string;
+  type?: string | null;
   ipAddress?: string | null;
   disconnectedAtUtc?: string | null;
 }
@@ -28,6 +29,7 @@ export interface StatusResponse {
 export interface AgentUpdatedEvent {
   hostName?: string;
   status?: string | null;
+  type?: string | null;
   ipAddress?: string | null;
   disconnectedAtUtc?: string | null;
 }
@@ -45,12 +47,24 @@ export interface RuntimeServiceState {
   health?: string | null;
 }
 
+export interface SslCertificateInfo {
+  domain: string;
+  notBeforeUtc?: string | null;
+  notAfterUtc?: string | null;
+  daysLeft?: number | null;
+  isValid: boolean;
+  error?: string | null;
+}
+
 export interface StackRuntimeItem {
+  hostName?: string;
   tag: string;
   running: boolean;
   operationType?: string | null;
   operationStatus?: string | null;
   operationError?: string | null;
   serviceLinks?: ServiceLinks | null;
+  serviceDomains?: string[] | null;
   services?: Record<string, RuntimeServiceState>;
+  certificates?: SslCertificateInfo[] | null;
 }

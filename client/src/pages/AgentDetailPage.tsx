@@ -10,7 +10,7 @@ import {
 import { usePolling } from "../pollingContext";
 import { useAppStore } from "../store/appStore";
 import "../components/StackCard/StackCard.css";
-import type { ServiceLinks } from "../types";
+import type { ServiceLinks, SslCertificateInfo } from "../types";
 import { ServiceStatesTable } from "../components/ServiceStatesTable/ServiceStatesTable";
 import { ServiceLinks as ServiceLinksBlock } from "../components/ServiceLinks/ServiceLinks";
 
@@ -30,6 +30,20 @@ interface ManagedProjectOverride {
   operationStatus: string;
 }
 
+interface AddDomainsResponse {
+  ok?: boolean;
+  payload?: {
+    serviceDomains?: string[] | null;
+  };
+}
+
+interface DeleteDomainResponse {
+  ok?: boolean;
+  payload?: {
+    serviceDomain?: string | null;
+  };
+}
+
 function isPendingOperationStatus(status?: string | null) {
   return (
     status === "in_progress" ||
@@ -37,6 +51,10 @@ function isPendingOperationStatus(status?: string | null) {
     status === "stopping" ||
     status === "starting"
   );
+}
+
+function isReadonlyAgent(type?: string | null) {
+  return type?.trim().toLowerCase() === "readonly";
 }
 
 export function AgentDetailPage() {
@@ -74,11 +92,7 @@ export function AgentDetailPage() {
 
   const agentInfo = status.agents[hostName];
   const agentStatus = agentInfo?.status;
-  const agentIpAddress = useMemo(() => {
-    const raw = agentInfo?.ipAddress?.trim();
-    if (!raw) return null;
-    return raw.startsWith("::ffff:") ? raw.slice("::ffff:".length) : raw;
-  }, [agentInfo?.ipAddress]);
+  const readonlyAgent = isReadonlyAgent(agentInfo?.type);
   const agentDisconnectedAtText = useMemo(() => {
     const raw = agentInfo?.disconnectedAtUtc?.trim();
     if (!raw) return null;
@@ -100,6 +114,12 @@ export function AgentDetailPage() {
   const [launchOk, setLaunchOk] = useState<string | null>(null);
   const [launchLinks, setLaunchLinks] = useState<ServiceLinks | null>(null);
   const [isLaunchPanelOpen, setIsLaunchPanelOpen] = useState(false);
+  const [isDomainsPanelOpen, setIsDomainsPanelOpen] = useState(false);
+  const [domainsInput, setDomainsInput] = useState("");
+  const [domainsSubmitting, setDomainsSubmitting] = useState(false);
+  const [removingDomain, setRemovingDomain] = useState<string | null>(null);
+  const [domainsError, setDomainsError] = useState<string | null>(null);
+  const [domainsOk, setDomainsOk] = useState<string | null>(null);
   const [lastStartedTag, setLastStartedTag] = useState<string | null>(null);
   const [managedProjectOverride, setManagedProjectOverride] = useState<ManagedProjectOverride | null>(null);
   const [pausingProject, setPausingProject] = useState(false);
@@ -152,6 +172,10 @@ export function AgentDetailPage() {
       ) as [string, string][],
     [managedLinks]
   );
+  const managedCertificates = useMemo(
+    () => managedStack?.certificates ?? [],
+    [managedStack]
+  );
   const isManagedProjectLoading =
     launching || isPendingOperationStatus(effectiveManagedOperationStatus);
   const hasManagedProject = !!managedStack;
@@ -178,19 +202,22 @@ export function AgentDetailPage() {
     hasManagedProject &&
     isManagedProjectRunning &&
     !isManagedProjectLoading &&
-    !isProjectActionPending;
+    !isProjectActionPending &&
+    !readonlyAgent;
   const canPauseManagedProject =
     hasManagedProject &&
     isManagedProjectRunning &&
     !isManagedProjectLoading &&
-    !isProjectActionPending;
+    !isProjectActionPending &&
+    !readonlyAgent;
   const canStartManagedProject =
     hasManagedProject &&
     !isManagedProjectRunning &&
     !isManagedProjectLoading &&
-    !isProjectActionPending;
+    !isProjectActionPending &&
+    !readonlyAgent;
   const canDeleteManagedProject =
-    hasManagedProject && !isManagedProjectLoading && !isProjectActionPending;
+    hasManagedProject && !isManagedProjectLoading && !isProjectActionPending && !readonlyAgent;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -236,6 +263,7 @@ export function AgentDetailPage() {
 
   async function onLaunch(e: FormEvent) {
     e.preventDefault();
+    if (readonlyAgent) return;
     setLaunchError(null);
     setLaunchOk(null);
     setLaunchLinks(null);
@@ -271,6 +299,7 @@ export function AgentDetailPage() {
 
   async function onStopManagedProject() {
     if (!managedTag) return;
+    if (readonlyAgent) return;
     setLaunchError(null);
     setLaunchOk(null);
     setManagedProjectOverride(null);
@@ -299,6 +328,7 @@ export function AgentDetailPage() {
 
   async function onPauseManagedProject() {
     if (!managedTag) return;
+    if (readonlyAgent) return;
     setLaunchError(null);
     setLaunchOk(null);
     setManagedProjectOverride(null);
@@ -327,6 +357,7 @@ export function AgentDetailPage() {
 
   async function onStartManagedProject() {
     if (!managedTag) return;
+    if (readonlyAgent) return;
     setLaunchError(null);
     setLaunchOk(null);
     setManagedProjectOverride(null);
@@ -356,6 +387,7 @@ export function AgentDetailPage() {
 
   async function onRestartManagedProject() {
     if (!managedTag) return;
+    if (readonlyAgent) return;
     setLaunchError(null);
     setLaunchOk(null);
     setManagedProjectOverride(null);
@@ -375,6 +407,86 @@ export function AgentDetailPage() {
     } finally {
       setRestartingProject(false);
     }
+  }
+
+  async function onAddDomains(e: FormEvent) {
+    e.preventDefault();
+    if (!managedTag || readonlyAgent) return;
+
+    setDomainsError(null);
+    setDomainsOk(null);
+
+    const domains = domainsInput
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    if (domains.length === 0) {
+      setDomainsError("Введите хотя бы один домен через запятую");
+      return;
+    }
+
+    setDomainsSubmitting(true);
+    try {
+      await api<AddDomainsResponse>(
+        `/api/agents/${encodeURIComponent(hostName)}/add-domains`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tag: managedTag,
+            domains,
+          }),
+        }
+      );
+      setDomainsOk("Домены привязаны.");
+      setDomainsInput("");
+      await loadStatus();
+    } catch (err) {
+      setDomainsError(errMessage(err));
+    } finally {
+      setDomainsSubmitting(false);
+    }
+  }
+
+  async function onDeleteDomain(domain: string) {
+    if (!managedTag || readonlyAgent) return;
+
+    setDomainsError(null);
+    setDomainsOk(null);
+    setRemovingDomain(domain);
+
+    try {
+      await api<DeleteDomainResponse>(
+        `/api/agents/${encodeURIComponent(hostName)}/delete-domain`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            tag: managedTag,
+            domain,
+          }),
+        }
+      );
+      setDomainsOk(`Домен ${domain} удалён.`);
+      await loadStatus();
+    } catch (err) {
+      setDomainsError(errMessage(err));
+    } finally {
+      setRemovingDomain(null);
+    }
+  }
+
+  function formatCertificateDate(value?: string | null) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString("ru-RU");
+  }
+
+  function certificateStatusClassName(certificate: SslCertificateInfo) {
+    if (certificate.error) return "agent-detail__certificate agent-detail__certificate--error";
+    if ((certificate.daysLeft ?? -1) < 7) return "agent-detail__certificate agent-detail__certificate--danger";
+    if ((certificate.daysLeft ?? -1) < 30) return "agent-detail__certificate agent-detail__certificate--warn";
+    return "agent-detail__certificate agent-detail__certificate--ok";
   }
 
   if (!hostName) {
@@ -413,37 +525,37 @@ export function AgentDetailPage() {
         >
           Перейти к управлению запуском сервисов
         </button>
+        {!isTagRoute && (
+          <div className="agent-detail__summary-card">
+            <h1 className="agent-detail__title">{hostName}</h1>
+            <p
+              className={
+                isDisconnected
+                  ? "agent-detail__status-line agent-detail__status-line--disconnected"
+                  : agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED
+                    ? "agent-detail__status-line agent-detail__status-line--accepted"
+                    : "agent-detail__status-line"
+              }
+            >
+              Статус: <strong>{agentStatus}</strong>
+            </p>
+            {readonlyAgent && (
+              <p className="agent-detail__meta-line">
+                Режим: <strong>readonly</strong>
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <Link to="/agents" className="agent-detail__back">
         ← К списку
       </Link>
 
-      {!isTagRoute && (
-        <>
-          <h1 className="agent-detail__title">{hostName}</h1>
-          <p
-            className={
-              isDisconnected
-                ? "agent-detail__status-line agent-detail__status-line--disconnected"
-                : agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED
-                  ? "agent-detail__status-line agent-detail__status-line--accepted"
-                  : "agent-detail__status-line"
-            }
-          >
-            Статус: <strong>{agentStatus}</strong>
-          </p>
-          {agentIpAddress && (
-            <p className="agent-detail__meta-line">
-              IP агента: <strong>{agentIpAddress}</strong>
-            </p>
-          )}
-          {agentDisconnectedAtText && (
-            <p className="agent-detail__meta-line">
-              Дата дисконнекта: <strong>{agentDisconnectedAtText}</strong>
-            </p>
-          )}
-        </>
+      {!isTagRoute && agentDisconnectedAtText && (
+        <p className="agent-detail__meta-line">
+          Дата дисконнекта: <strong>{agentDisconnectedAtText}</strong>
+        </p>
       )}
 
       {isDisconnected && (
@@ -504,60 +616,7 @@ export function AgentDetailPage() {
         !isDisconnected &&
         agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED && (
           <>
-            <p className="agent-detail__ok">Пароль принят.</p>
             <div className="agent-detail__launch-section">
-              <button
-                type="button"
-                className="agent-detail__add-project"
-                onClick={() => setIsLaunchPanelOpen((value) => !value)}
-              >
-                {isLaunchPanelOpen ? "Скрыть форму проекта" : "Добавить новый проект"}
-              </button>
-              {isLaunchPanelOpen && (
-                <div className="agent-detail__launch-layout">
-                  <form
-                    className="agent-detail__form agent-detail__form--launch"
-                    onSubmit={(e) => void onLaunch(e)}
-                  >
-                    <label className="agent-detail__label" htmlFor="agent-launch-tag">
-                      Тег образа
-                    </label>
-                    <input
-                      id="agent-launch-tag"
-                      list="agent-launch-tags"
-                      type="text"
-                      className="agent-detail__input"
-                      value={launchTag}
-                      onChange={(e) => setLaunchTag(e.target.value)}
-                      placeholder="Введите или выберите тег"
-                      autoComplete="off"
-                    />
-                    <datalist id="agent-launch-tags">
-                      {tagItemsForHost.map((item) => (
-                        <option key={item.tag} value={item.tag} />
-                      ))}
-                    </datalist>
-                    {tagsError && (
-                      <p className="agent-detail__error">{tagsError}</p>
-                    )}
-                    <button
-                      type="button"
-                      className="agent-detail__refresh"
-                      disabled={tagsLoading || launching}
-                      onClick={() => void loadTags(hostName)}
-                    >
-                      {tagsLoading ? "…" : "Обновить теги"}
-                    </button>
-                    <button
-                      type="submit"
-                      className="agent-detail__submit"
-                      disabled={launching}
-                    >
-                      {launching ? "…" : "Поднять проект"}
-                    </button>
-                  </form>
-                </div>
-              )}
               {agentTags.length > 0 && (
                 <div className="agent-detail__tags-grid">
                   {agentTags.map((tag) => (
@@ -615,6 +674,59 @@ export function AgentDetailPage() {
                       );
                     })()
                   ))}
+                </div>
+              )}
+              <button
+                type="button"
+                className="agent-detail__add-project"
+                disabled={readonlyAgent}
+                onClick={() => setIsLaunchPanelOpen((value) => !value)}
+              >
+                {isLaunchPanelOpen ? "Скрыть форму проекта" : "Добавить новый проект"}
+              </button>
+              {isLaunchPanelOpen && (
+                <div className="agent-detail__launch-layout">
+                  <form
+                    className="agent-detail__form agent-detail__form--launch"
+                    onSubmit={(e) => void onLaunch(e)}
+                  >
+                    <label className="agent-detail__label" htmlFor="agent-launch-tag">
+                      Тег образа
+                    </label>
+                    <input
+                      id="agent-launch-tag"
+                      list="agent-launch-tags"
+                      type="text"
+                      className="agent-detail__input"
+                      value={launchTag}
+                      onChange={(e) => setLaunchTag(e.target.value)}
+                      placeholder="Введите или выберите тег"
+                      autoComplete="off"
+                    />
+                    <datalist id="agent-launch-tags">
+                      {tagItemsForHost.map((item) => (
+                        <option key={item.tag} value={item.tag} />
+                      ))}
+                    </datalist>
+                    {tagsError && (
+                      <p className="agent-detail__error">{tagsError}</p>
+                    )}
+                    <button
+                      type="button"
+                      className="agent-detail__refresh"
+                      disabled={tagsLoading || launching}
+                      onClick={() => void loadTags(hostName)}
+                    >
+                      {tagsLoading ? "…" : "Обновить теги"}
+                    </button>
+                    <button
+                      type="submit"
+                      className="agent-detail__submit"
+                      disabled={launching || readonlyAgent}
+                    >
+                      {launching ? "…" : "Запустить сервис"}
+                    </button>
+                  </form>
                 </div>
               )}
             </div>
@@ -688,7 +800,7 @@ export function AgentDetailPage() {
               disabled={!canRestartManagedProject}
               onClick={() => void onRestartManagedProject()}
             >
-              {restartingProject ? "Перезагружаем..." : "Перезагрузить проект"}
+              {restartingProject ? "Перезагружаем..." : "Перезагрузить сервис"}
             </button>
             <button
               type="button"
@@ -707,10 +819,10 @@ export function AgentDetailPage() {
               {pausingProject
                 ? shouldRenderPauseAction
                   ? "Останавливаем..."
-                  : "Поднимаем..."
+                  : "Запускаем..."
                 : shouldRenderPauseAction
-                  ? "Остановить проект"
-                  : "Поднять проект"}
+                  ? "Остановить сервис"
+                  : "Запустить сервис"}
             </button>
             <button
               type="button"
@@ -718,8 +830,97 @@ export function AgentDetailPage() {
               disabled={!canDeleteManagedProject}
               onClick={() => void onStopManagedProject()}
             >
-              {stoppingProject ? "Выключаем..." : "Выключить проект"}
+              {stoppingProject ? "Удаляем..." : "Удалить сервис"}
             </button>
+          </div>
+
+          <div className="agent-detail__domains-section">
+            <button
+              type="button"
+              className="agent-detail__add-project agent-detail__add-project--domains"
+              disabled={!hasManagedProject || readonlyAgent}
+              onClick={() => setIsDomainsPanelOpen((value) => !value)}
+            >
+              {isDomainsPanelOpen ? "Скрыть форму доменов" : "Привязать домен"}
+            </button>
+
+            {isDomainsPanelOpen && (
+              <div className="agent-detail__launch-layout">
+                <form
+                  className="agent-detail__form agent-detail__form--launch"
+                  onSubmit={(e) => void onAddDomains(e)}
+                >
+                  <label className="agent-detail__label" htmlFor="agent-service-domains">
+                    Домены через запятую
+                  </label>
+                  <input
+                    id="agent-service-domains"
+                    type="text"
+                    className="agent-detail__input"
+                    value={domainsInput}
+                    onChange={(e) => setDomainsInput(e.target.value)}
+                    placeholder="admin.vseupalo.ru, portal.vseupalo.ru"
+                    autoComplete="off"
+                  />
+                  {domainsError && (
+                    <p className="agent-detail__error">{domainsError}</p>
+                  )}
+                  {domainsOk && (
+                    <p className="agent-detail__ok">{domainsOk}</p>
+                  )}
+                  <button
+                    type="submit"
+                    className="agent-detail__submit"
+                    disabled={domainsSubmitting || readonlyAgent}
+                  >
+                    {domainsSubmitting ? "…" : "Сохранить домены"}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            <div className="agent-detail__ssl-summary">
+              <p className="agent-detail__panel-title">SSL сертификаты</p>
+              {managedCertificates.length === 0 ? (
+                <p className="agent-detail__hint">
+                  Данные по SSL появятся после проверки сертификатов.
+                </p>
+              ) : (
+                <div className="agent-detail__certificates">
+                  {managedCertificates.map((certificate) => (
+                    <div
+                      key={certificate.domain}
+                      className={certificateStatusClassName(certificate)}
+                    >
+                      <p className="agent-detail__certificate-title">{certificate.domain}</p>
+                      <p className="agent-detail__certificate-line">
+                        Начало: <strong>{formatCertificateDate(certificate.notBeforeUtc)}</strong>
+                      </p>
+                      <p className="agent-detail__certificate-line">
+                        Конец: <strong>{formatCertificateDate(certificate.notAfterUtc)}</strong>
+                      </p>
+                      <p className="agent-detail__certificate-line">
+                        Осталось дней: <strong>{certificate.daysLeft ?? "—"}</strong>
+                      </p>
+                      {certificate.error && (
+                        <p className="agent-detail__error">{certificate.error}</p>
+                      )}
+                      <div className="agent-detail__certificate-actions">
+                        <button
+                          type="button"
+                          className="agent-detail__domain-remove agent-detail__domain-remove--card"
+                          disabled={readonlyAgent || removingDomain === certificate.domain}
+                          onClick={() => void onDeleteDomain(certificate.domain)}
+                          aria-label={`Удалить домен ${certificate.domain}`}
+                        >
+                          {removingDomain === certificate.domain ? "…" : "×"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}

@@ -43,6 +43,9 @@ export function MainPage() {
 
   const singleTagsHost =
     acceptableHostsForTags.length === 1 ? acceptableHostsForTags[0] : null;
+  const singleHostInfo = singleTagsHost ? status.agents[singleTagsHost] : null;
+  const singleHostReadonly =
+    singleHostInfo?.type?.trim().toLowerCase() === "readonly";
 
   const items = singleTagsHost
     ? tagsByHost[singleTagsHost] ?? []
@@ -91,6 +94,10 @@ export function MainPage() {
     () => status.stacks.find((s) => s.tag === selectedTagView) ?? null,
     [status.stacks, selectedTagView]
   );
+  const selectedStackReadonly = selectedStack?.hostName
+    ? status.agents[selectedStack.hostName]?.type?.trim().toLowerCase() ===
+      "readonly"
+    : false;
   const isCurrentTagStarting =
     !!effectiveTag && pendingStartTags.includes(effectiveTag);
   const isSelectedTagStopping =
@@ -115,6 +122,7 @@ export function MainPage() {
 
   async function onPrimaryClick() {
     dispatchApp({ type: "ACTION_ERROR_SET", error: null });
+    if (singleHostReadonly || selectedStackReadonly) return;
     if (selectedTagView && selectedStack?.running) {
       const hostName = selectedStack.hostName?.trim();
       if (!hostName) {
@@ -247,7 +255,9 @@ export function MainPage() {
           (selectedTagView
             ? isSelectedTagStopping || !selectedStack?.running
             : !effectiveTag || isCurrentTagStarting) ||
-          !!tagsError
+          !!tagsError ||
+          singleHostReadonly ||
+          selectedStackReadonly
         }
         onClick={() => void onPrimaryClick()}
       >
@@ -259,6 +269,11 @@ export function MainPage() {
       </button>
 
       {actionError && <p className="error">{actionError}</p>}
+      {(singleHostReadonly || selectedStackReadonly) && (
+        <p className="hint">
+          Выбранный агент работает в режиме readonly. На этой странице доступны только просмотр и обновление данных.
+        </p>
+      )}
       {!selectedTagView && stackErrors.length > 0 && (
         <StackErrors items={stackErrors} formatError={formatStackError} />
       )}

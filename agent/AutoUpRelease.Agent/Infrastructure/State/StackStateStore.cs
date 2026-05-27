@@ -35,7 +35,8 @@ public static class StackStateStore
                     StringComparer.Ordinal),
                 Operation = existingEntry?.Operation,
                 Ports = existingEntry?.Ports ?? new Dictionary<string, int>(StringComparer.Ordinal),
-                ServiceLinks = existingEntry?.ServiceLinks
+                ServiceLinks = existingEntry?.ServiceLinks,
+                ServiceDomains = existingEntry?.ServiceDomains
             };
 
             await WriteModelAsync(stateFilePath, model);
@@ -136,6 +137,79 @@ public static class StackStateStore
         }
     }
 
+    public static async Task SetServiceDomainsAsync(
+        string stateFilePath,
+        string stackName,
+        List<string> domains
+    )
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            var existingDomains = entry.ServiceDomains ?? new List<string>();
+            entry.ServiceDomains = existingDomains
+                .Concat(domains)
+                .Where(domain => !string.IsNullOrWhiteSpace(domain))
+                .Select(domain => domain.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task RemoveServiceDomainAsync(
+        string stateFilePath,
+        string stackName,
+        string domain
+    )
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+            
+            var normalizedDomain = domain?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalizedDomain))
+                return;
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            var existingDomains = entry.ServiceDomains ?? new List<string>();
+            entry.ServiceDomains = existingDomains
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim().ToLowerInvariant())
+                .Where(x => !string.Equals(x, normalizedDomain, StringComparison.Ordinal))
+                .Distinct()
+                .ToList();
+                
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
     public static async Task<Dictionary<string, int>> GetAllocatedPortsAsync(string stateFilePath, string stackName)
     {
         var fileLock = GetFileLock(stateFilePath);
@@ -226,6 +300,51 @@ public static class StackStateStore
         }
     }
 
+    public static async Task<List<StaleStartRecoveryCandidate>> GetStaleStartRecoveryCandidatesAsync(
+        string stateFilePath,
+        TimeSpan staleThreshold)
+    {
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var model = await ReadModelAsync(stateFilePath);
+            var now = DateTimeOffset.UtcNow;
+            var result = new List<StaleStartRecoveryCandidate>();
+
+            foreach (var entry in model.Stack)
+            {
+                var stackName = entry.Key;
+                var stack = entry.Value;
+                var operation = stack.Operation;
+                if (operation is null)
+                    continue;
+
+                if (!string.Equals(operation.Type, "start", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!string.Equals(operation.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (now - operation.UpdatedAtUtc < staleThreshold)
+                    continue;
+                if (stack.Ports.Count == 0)
+                    continue;
+
+                result.Add(new StaleStartRecoveryCandidate(
+                    stackName,
+                    operation.Type,
+                    operation.Status,
+                    operation.UpdatedAtUtc,
+                    stack.Ports.Count));
+            }
+
+            return result;
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
     public static async Task<List<string>> GetStackNamesAsync(string stateFilePath)
     {
         var model = await ReadModelAsync(stateFilePath);
@@ -279,6 +398,8 @@ public static class StackStateStore
         public StackOperation? Operation { get; set; }
         public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);
         public DeployServiceLinks? ServiceLinks { get; set; }
+
+        public List<string>? ServiceDomains { get; set; }
     }
 
     sealed class StackOperation
@@ -288,5 +409,11 @@ public static class StackStateStore
         public string? Error { get; set; }
         public DateTimeOffset UpdatedAtUtc { get; set; }
     }
-
 }
+
+public sealed record StaleStartRecoveryCandidate(
+    string StackName,
+    string OperationType,
+    string OperationStatus,
+    DateTimeOffset UpdatedAtUtc,
+    int PortsCount);

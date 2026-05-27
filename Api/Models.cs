@@ -5,25 +5,23 @@ namespace AutoUpRelease.Api;
 public record StartBody(
     [property: JsonPropertyName("tag")] string? Tag);
 
-public record StopBody(
-    [property: JsonPropertyName("tag")] string? Tag);
-
 public record AgentPasswordBody(
     [property: JsonPropertyName("password")] string? Password);
 
+public sealed record AddDomainsBody(
+    [property: JsonPropertyName("tag")] string? Tag,
+    [property: JsonPropertyName("domains")] List<string>? Domains);
+
+public sealed record DeleteDomainBody(
+    [property: JsonPropertyName("tag")] string? Tag,
+    [property: JsonPropertyName("domain")] string? Domain);
+
 public record TagItem(string Tag);
 
-public class ServiceLinkEnvKeys
-{
-    public string Admin { get; set; } = "DNS_NAME_BACKOFFICE";
-    public string Server { get; set; } = "DNS_NAME_SERVER";
-    public string Portal { get; set; } = "DNS_NAME_RDV";
-    public string Call { get; set; } = "DNS_NAME_CALL";
-}
-
-public class PortAllocationOptions
-{
-    public List<string> Keys { get; set; } = new();
-    public int ScanMin { get; set; } = 1024;
-    public int ScanMax { get; set; } = 65535;
-}
+public sealed record SslCertificateInfo(
+    string Domain,
+    DateTimeOffset? NotBeforeUtc,
+    DateTimeOffset? NotAfterUtc,
+    int? DaysLeft,
+    bool IsValid,
+    string? Error);

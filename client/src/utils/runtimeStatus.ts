@@ -1,4 +1,4 @@
-import type { RuntimeServiceState, StackRuntimeItem, StatusUpdatedEvent } from "../types";
+import type { RuntimeServiceState, SslCertificateInfo, StackRuntimeItem, StatusUpdatedEvent } from "../types";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -52,7 +52,51 @@ function parseServices(stack: JsonRecord): Record<string, RuntimeServiceState> {
   return result;
 }
 
-function parseStackItem(tag: string, stack: JsonRecord): StackRuntimeItem {
+function parseStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const result = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  return result.length > 0 ? result : null;
+}
+
+function parseCertificates(stack: JsonRecord): StackRuntimeItem["certificates"] {
+  const rawCertificates = stack.certificates ?? stack.Certificates;
+  if (!Array.isArray(rawCertificates)) return null;
+
+  const result: SslCertificateInfo[] = [];
+  for (const rawCertificate of rawCertificates) {
+    if (!isRecord(rawCertificate)) continue;
+
+    const domain = readString(rawCertificate, "domain", "Domain");
+    if (!domain) continue;
+
+    const notBeforeUtc = readString(rawCertificate, "notBeforeUtc", "NotBeforeUtc");
+    const notAfterUtc = readString(rawCertificate, "notAfterUtc", "NotAfterUtc");
+    const error = readString(rawCertificate, "error", "Error");
+    const daysLeftValue = rawCertificate.daysLeft ?? rawCertificate.DaysLeft;
+    const daysLeft =
+      typeof daysLeftValue === "number" && Number.isFinite(daysLeftValue)
+        ? daysLeftValue
+        : null;
+
+    result.push({
+      domain,
+      notBeforeUtc,
+      notAfterUtc,
+      daysLeft,
+      isValid: readBoolean(rawCertificate, "isValid"),
+      error,
+    });
+  }
+
+  return result.length > 0 ? result : null;
+}
+
+function parseStackItem(hostName: string, tag: string, stack: JsonRecord): StackRuntimeItem {
   const services = parseServices(stack);
   const runningFromServices = Object.values(services).some(
     (service) => service.state.toLowerCase() === "running"
@@ -60,18 +104,24 @@ function parseStackItem(tag: string, stack: JsonRecord): StackRuntimeItem {
   const running = readBoolean(stack, "running") || runningFromServices;
 
   return {
+    hostName,
     tag,
     running,
     operationType: readString(stack, "operationType", "OperationType"),
     operationStatus: readString(stack, "operationStatus", "OperationStatus"),
     operationError: readString(stack, "operationError", "OperationError"),
     serviceLinks: parseServiceLinks(stack),
+    serviceDomains: parseStringArray(stack.serviceDomains ?? stack.ServiceDomains),
     services,
+    certificates: parseCertificates(stack),
   };
 }
 
 /** Парсит payload snapshot от агента (поле stacks/stack). */
-export function parseStacksFromSnapshot(snapshot: unknown): StackRuntimeItem[] {
+export function parseStacksFromSnapshot(
+  snapshot: unknown,
+  hostName = ""
+): StackRuntimeItem[] {
   if (!isRecord(snapshot)) return [];
 
   const stacksRoot = snapshot.stacks ?? snapshot.stack ?? snapshot.Stacks;
@@ -81,7 +131,7 @@ export function parseStacksFromSnapshot(snapshot: unknown): StackRuntimeItem[] {
   for (const [tag, rawStack] of Object.entries(stacksRoot)) {
     const normalizedTag = tag.trim();
     if (!normalizedTag || !isRecord(rawStack)) continue;
-    items.push(parseStackItem(normalizedTag, rawStack));
+    items.push(parseStackItem(hostName, normalizedTag, rawStack));
   }
   return items;
 }
@@ -93,7 +143,7 @@ export function parseStatusUpdatedEvent(
   if (!hostName) return null;
   return {
     hostName,
-    stacks: parseStacksFromSnapshot(payload.snapshot),
+    stacks: parseStacksFromSnapshot(payload.snapshot, hostName),
   };
 }
 
@@ -101,8 +151,8 @@ export function flattenStacksByHost(
   stacksByHost: Record<string, StackRuntimeItem[]>
 ): StackRuntimeItem[] {
   const byTag = new Map<string, StackRuntimeItem>();
-  for (const stacks of Object.values(stacksByHost)) {
-    for (const stack of stacks) byTag.set(stack.tag, stack);
+  for (const [hostName, stacks] of Object.entries(stacksByHost)) {
+    for (const stack of stacks) byTag.set(stack.tag, { ...stack, hostName });
   }
   return [...byTag.values()];
 }

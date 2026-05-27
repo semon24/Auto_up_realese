@@ -100,6 +100,18 @@
   overflow-wrap: anywhere;
 }
 
+.agents-page__meta--ssl {
+  color: #d9c07a;
+}
+
+.agents-page__meta--ssl strong {
+  overflow-wrap: anywhere;
+}
+
+.agents-page__ssl-days {
+  color: #f0c674;
+}
+
 .agents-page__empty {
   margin: 0;
   font-size: 1.05rem;

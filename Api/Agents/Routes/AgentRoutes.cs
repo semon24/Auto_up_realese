@@ -1,6 +1,7 @@
 using AutoUpRelease.Api;
 using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
+using AutoUpRelease.Api.Ssl;
 using Microsoft.AspNetCore.SignalR;
 
 namespace AutoUpRelease.Api.Agents;
@@ -49,8 +50,12 @@ public static class AgentRoutes
             string hostName,
             StartBody? body,
             AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
             CancellationToken ct) =>
         {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
             var tag = body?.Tag?.Trim();
             if (string.IsNullOrEmpty(tag))
                 return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
@@ -71,8 +76,12 @@ public static class AgentRoutes
             string hostName,
             StartBody? body,
             AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
             CancellationToken ct) =>
         {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
             var tag = body?.Tag?.Trim();
             if (string.IsNullOrEmpty(tag))
                 return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
@@ -93,8 +102,12 @@ public static class AgentRoutes
             string hostName,
             StartBody? body,
             AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
             CancellationToken ct) =>
         {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
             var tag = body?.Tag?.Trim();
             if (string.IsNullOrEmpty(tag))
                 return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
@@ -115,8 +128,12 @@ public static class AgentRoutes
             string hostName,
             StartBody? body,
             AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
             CancellationToken ct) =>
         {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
             var tag = body?.Tag?.Trim();
             if (string.IsNullOrEmpty(tag))
                 return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
@@ -133,6 +150,91 @@ public static class AgentRoutes
             return Results.Json(new { ok = true, payload });
         });
 
+        app.MapPost("/api/agents/{hostName}/add-domains", async (
+            string hostName,
+            AddDomainsBody? body,
+            AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
+            SslCertificateRefreshService sslCertificateRefreshService,
+            CancellationToken ct) =>
+        {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
+            var tag = body?.Tag?.Trim();
+            if (string.IsNullOrEmpty(tag))
+                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+
+            var domains = body?.Domains?
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .ToList();
+
+            if (domains is null || domains.Count == 0)
+                return Results.Json(new { error = "Нужен хотя бы один домен" }, statusCode: 400);
+
+            var (ok, error, payload) = await sessions.StartAddDomainsWithAgentAsync(
+                hostName,
+                tag,
+                domains,
+                TimeSpan.FromMinutes(15),
+                ct);
+
+            if (!ok)
+                return Results.Json(new { error = error ?? "Ошибка добавления доменов на агенте" }, statusCode: 400);
+
+            await sslCertificateRefreshService.RefreshStackAsync(hostName, tag, ct);
+
+            return Results.Json(new { ok = true, payload });
+        });
+
+        app.MapPost("/api/agents/{hostName}/delete-domain", async (
+            string hostName,
+            DeleteDomainBody? body,
+            AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
+            SslCertificateRefreshService sslCertificateRefreshService,
+            CancellationToken ct) =>
+        {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
+            var tag = body?.Tag?.Trim();
+            if (string.IsNullOrEmpty(tag))
+                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+
+            var domain = body?.Domain?.Trim();
+            if (string.IsNullOrEmpty(domain))
+                return Results.Json(new { error = "Нужен домен" }, statusCode: 400);
+
+            var (ok, error, payload) = await sessions.StartDeleteDomainWithAgentAsync(
+                hostName,
+                tag,
+                domain,
+                TimeSpan.FromMinutes(15),
+                ct);
+
+            if (!ok)
+                return Results.Json(new { error = error ?? "Ошибка удаления домена на агенте" }, statusCode: 400);
+
+            await sslCertificateRefreshService.RefreshStackAsync(hostName, tag, ct);
+
+            return Results.Json(new { ok = true, payload });
+        });
+
         return app;
+    }
+
+    static IResult? TryBuildReadonlyError(string hostName, AgentConnectionStatusFile agentsJson)
+    {
+        if (!agentsJson.TryGet(hostName, out var info))
+            return null;
+
+        if (!string.Equals(info?.Type, "readonly", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return Results.Json(
+            new { error = $"Агент '{hostName.Trim()}' подключён в режиме readonly. Управляющие действия запрещены." },
+            statusCode: 403);
     }
 }

@@ -5,6 +5,7 @@ using AutoUpRelease.Agent.Commands;
 using AutoUpRelease.Agent.Services.DeleteStackService;
 using AutoUpRelease.Agent.Services.RestartStackService;
 using AutoUpRelease.Agent.Services.StartStackService;
+using AutoUpRelease.Agent.Services.StaleStartRecoveryService;
 using AutoUpRelease.Agent.Services.StopStackService;
 
 
@@ -13,26 +14,27 @@ namespace AutoUpRelease.Agent;
 public sealed class AgentWorker : BackgroundService
 {
     static readonly TimeSpan AggregationInterval = TimeSpan.FromSeconds(10);
-
     private readonly AppOptions _appOptions;
     private readonly StartStackService _startStackService;
     private readonly DeleteStackService _deleteStackService;
     private readonly RestartStackService _restartStackService;
-
     private readonly StopStackService _stopStackService;
+    private readonly StaleStartRecoveryService _staleStartRecoveryService;
 
     public AgentWorker(
         IOptions<AppOptions> appOptions,
         StartStackService startStackService,
         DeleteStackService deleteStackService,
         RestartStackService restartStackService,
-        StopStackService stopStackService)
+        StopStackService stopStackService,
+        StaleStartRecoveryService staleStartRecoveryService)
     {
         _appOptions = appOptions.Value;
         _startStackService = startStackService;
         _deleteStackService = deleteStackService;
         _restartStackService = restartStackService;
         _stopStackService = stopStackService;
+        _staleStartRecoveryService = staleStartRecoveryService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -55,7 +57,7 @@ public sealed class AgentWorker : BackgroundService
 
     async Task RunSignalRSessionAsync(string hostName, CancellationToken stoppingToken)
     {
-        var connection = AgentSignalRConnection.Create(hostName);
+        var connection = AgentSignalRConnection.Create(hostName, _appOptions.Type);
         var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var aggregationCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         Task? aggregationTask = null;
@@ -90,6 +92,8 @@ public sealed class AgentWorker : BackgroundService
         DockerComposeRestartSignalRMessages.Register(connection, _restartStackService);
         DockerComposeStopSignalRMessages.Register(connection, _stopStackService);
         UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
+        AddDomainsSignalrMessages.Register(connection, _appOptions);
+        DeleteDomainsSignalrMessages.Register(connection, _appOptions);
         try
         {
             await connection.StartAsync(stoppingToken);
@@ -135,6 +139,7 @@ public sealed class AgentWorker : BackgroundService
     {
         try
         {
+            await _staleStartRecoveryService.RecoverAsync(cancellationToken);
             var linksUpdated = await RefreshServiceLinksInProjectStatesAsync(cancellationToken);
             var stacksCount = await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
                 _appOptions.ProjectDeploymentPath.Trim(),

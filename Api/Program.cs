@@ -2,6 +2,7 @@ using AutoUpRelease.Api;
 using AutoUpRelease.Api.Agents;
 using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
+using AutoUpRelease.Api.Ssl;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 
@@ -45,6 +46,10 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<AgentServicesSnapshotStore>();
 builder.Services.AddSingleton<AgentSessionStore>();
 builder.Services.AddSingleton<HarborTagsOrchestrator>();
+builder.Services.AddSingleton<SslCertificateStore>();
+builder.Services.AddSingleton<SslCertificateProbe>();
+builder.Services.AddSingleton<SslCertificateRefreshService>();
+builder.Services.AddHostedService<SslCertificateBackgroundService>();
 builder.Services.AddSignalR(options =>
 {
     options.KeepAliveInterval = TimeSpan.FromSeconds(10);

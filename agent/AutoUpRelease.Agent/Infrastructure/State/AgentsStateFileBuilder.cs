@@ -112,6 +112,7 @@ public static class AgentsStateFileBuilder
             OperationStatus = entry.Operation?.Status,
             OperationError = entry.Operation?.Error,
             ServiceLinks = entry.ServiceLinks,
+            ServiceDomains = entry.ServiceDomains?.ToList(),
             Services = entry.Services.ToDictionary(
                 kv => kv.Key,
                 kv => new DockerServiceState(kv.Value.State, kv.Value.Health),
@@ -136,6 +137,7 @@ public static class AgentsStateFileBuilder
         public DeployServiceLinks? ServiceLinks { get; set; }
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
         public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);
+        public List<string>? ServiceDomains { get; set; }
     }
 
     sealed class StateRoot
@@ -145,6 +147,7 @@ public static class AgentsStateFileBuilder
 
     sealed class StackEntry
     {
+        public List<string>? ServiceDomains { get; set; }
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
         public StackOperation? Operation { get; set; }
         public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);

@@ -6,6 +6,7 @@ import {
   AGENT_STATUS_WAITING_PASSWORD,
 } from "../constants";
 import { useAppStore } from "../store/appStore";
+import type { SslCertificateInfo } from "../types";
 import "../components/StackCard/StackCard.css";
 import "./AgentsPage.css";
 
@@ -13,6 +14,10 @@ function normalizeIpAddress(ipAddress?: string | null) {
   const raw = ipAddress?.trim();
   if (!raw) return null;
   return raw.startsWith("::ffff:") ? raw.slice("::ffff:".length) : raw;
+}
+
+function isReadonlyAgent(type?: string | null) {
+  return type?.trim().toLowerCase() === "readonly";
 }
 
 function compareVersionTags(a: string, b: string) {
@@ -27,6 +32,18 @@ function compareVersionTags(a: string, b: string) {
   }
 
   return b.localeCompare(a, undefined, { sensitivity: "base" });
+}
+
+function getMostUrgentCertificate(certificates: SslCertificateInfo[]) {
+  let result: SslCertificateInfo | null = null;
+
+  for (const certificate of certificates) {
+    if (typeof certificate.daysLeft !== "number") continue;
+    if (result === null || certificate.daysLeft < (result.daysLeft ?? Number.POSITIVE_INFINITY))
+      result = certificate;
+  }
+
+  return result;
 }
 
 export function AgentsPage() {
@@ -51,6 +68,7 @@ export function AgentsPage() {
             const disconnectedAtText = agentInfo.disconnectedAtUtc
               ? new Date(agentInfo.disconnectedAtUtc).toLocaleString("ru-RU")
               : null;
+            const readonlyAgent = isReadonlyAgent(agentInfo.type);
             const versionTags = Array.from(
               new Set(
                 (status.stacksByHost[hostName] ?? [])
@@ -65,6 +83,10 @@ export function AgentsPage() {
                 ? `${newestVersion} (${otherVersions.join(", ")})`
                 : newestVersion
               : null;
+            const allCertificates = (status.stacksByHost[hostName] ?? []).flatMap(
+              (stack) => stack.certificates ?? []
+            );
+            const mostUrgentCertificate = getMostUrgentCertificate(allCertificates);
             const isWaiting =
               agentStatus === AGENT_STATUS_WAITING_PASSWORD;
             const isPasswordAccepted =
@@ -85,6 +107,9 @@ export function AgentsPage() {
                   <div className={cardClass}>
                     <div className="agents-page__card-head">
                       <span className="agents-page__status">{agentStatus}</span>
+                      {readonlyAgent && (
+                        <span className="agents-page__meta">readonly</span>
+                      )}
                       <span className="stack-card__tag">{hostName}</span>
                     </div>
                     <div className="agents-page__card-main">
@@ -96,6 +121,15 @@ export function AgentsPage() {
                       {versionLine && (
                         <span className="agents-page__meta agents-page__meta--version">
                           Версия: <strong>{versionLine}</strong>
+                        </span>
+                      )}
+                      {mostUrgentCertificate && (
+                        <span className="agents-page__meta agents-page__meta--ssl">
+                          SSL:{" "}
+                          <strong>{mostUrgentCertificate.domain}</strong>{" "}
+                          <span className="agents-page__ssl-days">
+                            ({mostUrgentCertificate.daysLeft} дн.)
+                          </span>
                         </span>
                       )}
                     </div>
