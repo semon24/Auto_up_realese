@@ -12,8 +12,28 @@ import type {
   AgentConnectionInfo,
   AgentUpdatedEvent,
   RuntimeSnapshotByHost,
+  StackRuntimeItem,
   StatusUpdatedEvent,
 } from "../types";
+
+function normalizeRuntimeStack(rawStack: unknown): StackRuntimeItem | null {
+  if (!rawStack || typeof rawStack !== "object" || Array.isArray(rawStack)) {
+    return null;
+  }
+
+  const candidate = rawStack as Record<string, unknown>;
+  const stackNameValue = candidate.stackName ?? candidate.StackName ?? candidate.tag ?? candidate.Tag;
+  if (typeof stackNameValue !== "string" || stackNameValue.trim().length === 0) {
+    return null;
+  }
+
+  const stackName = stackNameValue.trim();
+  return {
+    ...(candidate as unknown as StackRuntimeItem),
+    tag: stackName,
+    stackName,
+  };
+}
 
 function mapRuntimeSnapshotByHost(
   snapshot: RuntimeSnapshotByHost | null | undefined
@@ -24,7 +44,9 @@ function mapRuntimeSnapshotByHost(
   for (const [hostName, stacks] of Object.entries(snapshot)) {
     const normalizedHost = hostName.trim();
     if (!normalizedHost || !Array.isArray(stacks)) continue;
-    result[normalizedHost] = stacks;
+    result[normalizedHost] = stacks
+      .map(normalizeRuntimeStack)
+      .filter((stack): stack is StackRuntimeItem => stack !== null);
   }
   return result;
 }

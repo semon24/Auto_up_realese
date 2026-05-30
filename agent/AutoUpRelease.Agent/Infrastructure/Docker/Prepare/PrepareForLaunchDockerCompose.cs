@@ -3,7 +3,8 @@ namespace AutoUpRelease.Agent;
 public static partial class DockerCompose
 {
     public static async Task PrepareStackResources(
-        string tag,
+        string StackName,
+        string Version,
         string stackDir,
         string envFilePath,
         string imageEnvKey,
@@ -11,12 +12,15 @@ public static partial class DockerCompose
     {
         var updates = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        if (!string.IsNullOrWhiteSpace(imageEnvKey) && string.IsNullOrWhiteSpace(EnvFile.ReadTag(envFilePath, imageEnvKey)))
-            updates[imageEnvKey] = tag;
+        if (!string.IsNullOrWhiteSpace(StackName))
+            updates["STACK_NAME"] = StackName;
 
-        await EnsureDatabaseResourcesAsync(tag, postgresPasswordEnvKey, updates);
-        await EnsureCommonVolumesAsync(tag);
-        await EnsureStackNetworkAsync(tag);
+        if (!string.IsNullOrWhiteSpace(imageEnvKey) && string.IsNullOrWhiteSpace(EnvFile.ReadTag(envFilePath, imageEnvKey)))
+            updates[imageEnvKey] = Version;
+
+        await EnsureDatabaseResourcesAsync(StackName, postgresPasswordEnvKey, updates);
+        await EnsureCommonVolumesAsync(StackName);
+        await EnsureStackNetworkAsync(StackName);
 
         if (!string.IsNullOrWhiteSpace(stackDir))
             updates["CONTAINER_DATA_PATH"] = stackDir;

@@ -33,6 +33,7 @@ public static class StackStateStore
                     kv => kv.Key,
                     kv => new DockerServiceState(kv.Value.State, kv.Value.Health),
                     StringComparer.Ordinal),
+                Version = existingEntry?.Version,
                 Operation = existingEntry?.Operation,
                 Ports = existingEntry?.Ports ?? new Dictionary<string, int>(StringComparer.Ordinal),
                 ServiceLinks = existingEntry?.ServiceLinks,
@@ -101,6 +102,37 @@ public static class StackStateStore
                 entry = new StackEntry();
 
             entry.Ports = ports.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task SetVersionAsync(
+        string stateFilePath,
+        string stackName,
+        string? version)
+    {
+        var normalizedVersion = version?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedVersion))
+            return;
+
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            entry.Version = normalizedVersion;
             model.Stack[stackName] = entry;
             await WriteModelAsync(stateFilePath, model);
         }
@@ -394,6 +426,7 @@ public static class StackStateStore
 
     sealed class StackEntry
     {
+        public string? Version { get; set; }
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
         public StackOperation? Operation { get; set; }
         public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);

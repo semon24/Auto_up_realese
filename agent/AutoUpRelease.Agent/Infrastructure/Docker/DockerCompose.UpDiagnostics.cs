@@ -10,11 +10,13 @@ public static partial class DockerCompose
 
     public static async Task RunUpDetachedWithDiagnosticsAsync(
         string composeDir,
+        IReadOnlyDictionary<string, string>? env = null,
         IReadOnlyList<string>? composeFiles = null,
         int failedServiceLogsTail = 120,
         Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
         TimeSpan? progressPollInterval = null)
     {
+        env ??= GetComposeEnv(composeDir);
         var upArgs = BuildComposeArgs(composeFiles, "up", "-d");
         using var progressCts = new CancellationTokenSource();
         Task? progressTask = null;
@@ -29,7 +31,11 @@ public static partial class DockerCompose
                 progressCts.Token);
         }
 
-        var (stdout, stderr, exitCode) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, upArgs.ToArray());
+        var (stdout, stderr, exitCode) = await RunProcessCaptureAsync(
+            composeDir,
+            DockerComposeCli,
+            upArgs.ToArray(),
+            env);
 
         if (progressTask is not null)
         {
@@ -83,6 +89,7 @@ public static partial class DockerCompose
         IReadOnlyList<string>? composeFiles,
         int tailLines)
     {
+        var env = GetComposeEnv(composeDir);
         var logsArgs = BuildComposeArgs(
             composeFiles,
             "logs",
@@ -91,7 +98,7 @@ public static partial class DockerCompose
             Math.Max(1, tailLines).ToString(),
             serviceName);
 
-        var (stdout, stderr, _) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, logsArgs.ToArray());
+        var (stdout, stderr, _) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, logsArgs.ToArray(), env);
 
         if (!string.IsNullOrWhiteSpace(stdout))
             return Truncate(stdout.Trim(), 6000);

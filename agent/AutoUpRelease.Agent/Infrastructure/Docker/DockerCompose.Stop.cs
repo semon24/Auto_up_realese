@@ -7,6 +7,6 @@ public static partial class DockerCompose
         IReadOnlyList<string>? composeFiles = null)
     {
         var stopArgs = BuildComposeArgs(composeFiles, "stop");
-        await RunProcessAsync(composeDir, DockerComposeCli, stopArgs.ToArray());
+        await RunProcessAsync(composeDir, DockerComposeCli, stopArgs.ToArray(), env: GetComposeEnv(composeDir));
     }
 }

@@ -59,6 +59,8 @@ export interface SslCertificateInfo {
 export interface StackRuntimeItem {
   hostName?: string;
   tag: string;
+  stackName?: string | null;
+  version?: string | null;
   running: boolean;
   operationType?: string | null;
   operationStatus?: string | null;

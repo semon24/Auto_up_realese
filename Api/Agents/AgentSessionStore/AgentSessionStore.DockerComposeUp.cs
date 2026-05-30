@@ -17,14 +17,17 @@ public sealed partial class AgentSessionStore
 
     public async Task<(bool Ok, string? Error, object? Payload)> StartDockerComposeUpWithAgentAsync(
         string hostName,
-        string tag,
+        string stackName,
+        string version,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
         if (Normalize(hostName) is not { } normalizedHostName)
             return (false, "hostName пустой", null);
-        if (string.IsNullOrWhiteSpace(tag))
-            return (false, "Нужен tag", null);
+        if (string.IsNullOrWhiteSpace(version))
+            return (false, "Нужен version", null);
+        if (string.IsNullOrWhiteSpace(stackName))
+            return (false, "Нужен stackName", null);
         if (!_connectionsByHost.TryGetValue(normalizedHostName, out var connectionId))
             return (false, "Агент не подключён", null);
 
@@ -45,7 +48,8 @@ public sealed partial class AgentSessionStore
                 new
                 {
                     id = id.ToString("N"),
-                    tag = tag.Trim()
+                    stackName = stackName.Trim(),
+                    version = version.Trim()
                 },
                 cancellationToken);
 

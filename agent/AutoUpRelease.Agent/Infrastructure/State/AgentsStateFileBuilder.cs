@@ -108,6 +108,7 @@ public static class AgentsStateFileBuilder
         return new AggregatedStackEntry
         {
             Running = running,
+            Version = entry.Version,
             OperationType = entry.Operation?.Type,
             OperationStatus = entry.Operation?.Status,
             OperationError = entry.Operation?.Error,
@@ -131,6 +132,7 @@ public static class AgentsStateFileBuilder
     sealed class AggregatedStackEntry
     {
         public bool Running { get; set; }
+        public string? Version { get; set; }
         public string? OperationType { get; set; }
         public string? OperationStatus { get; set; }
         public string? OperationError { get; set; }
@@ -147,6 +149,7 @@ public static class AgentsStateFileBuilder
 
     sealed class StackEntry
     {
+        public string? Version { get; set; }
         public List<string>? ServiceDomains { get; set; }
         public Dictionary<string, DockerServiceState> Services { get; set; } = new(StringComparer.Ordinal);
         public StackOperation? Operation { get; set; }

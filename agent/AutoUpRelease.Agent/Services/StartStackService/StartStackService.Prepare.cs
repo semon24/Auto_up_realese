@@ -15,12 +15,17 @@ public sealed partial class StartStackService
 
         await StackStateStore.SetOperationAsync(
             context.StackStateFile,
-            context.Tag,
+            context.StackName,
             operationType: "start",
             operationStatus: "in_progress");
+        await StackStateStore.SetVersionAsync(
+            context.StackStateFile,
+            context.StackName,
+            context.Version);
 
         await DockerCompose.PrepareStackResources(
-            context.Tag,
+            context.StackName,
+            context.Version,
             context.StackDir,
             context.StackEnvFile,
             _options.ImageEnvKey,
@@ -38,14 +43,14 @@ public sealed partial class StartStackService
         var allocatedPorts = await PortAllocator.AllocateAndWriteEnvAsync(
             context.DeployProjectsDir,
             context.StateFileName,
-            context.Tag,
+            context.StackName,
             context.StackEnvFile,
             keys,
             scanMin: 1024,
             scanMax: 65535,
             ct);
 
-        await StackStateStore.SetAllocatedPortsAsync(context.StackStateFile, context.Tag, allocatedPorts);
+        await StackStateStore.SetAllocatedPortsAsync(context.StackStateFile, context.StackName, allocatedPorts);
         return null;
     }
 

@@ -12,7 +12,7 @@ public static class StackCleanupService
     const string DockerCli = "docker";
     const string DockerComposeCli = DockerCli;
 
-    public static async Task CleanupStackAsync(string stackDir)
+    public static async Task CleanupStackAsync(string stackDir, string? stackName = null)
     {
         if (!Directory.Exists(stackDir))
         {
@@ -27,6 +27,7 @@ public static class StackCleanupService
         await TryComposeDownAsync(stackDir);
         await RemoveComposeResourcesAsync(stackDir);
         await RemoveExternalResourcesAsync(stackDir);
+        await RemoveExpectedExternalResourcesAsync(stackName);
 
         Console.WriteLine($"[cleanup] удаление рабочей папки стека: {stackDir}");
         StackWorkspaceManager.DeleteStackWorkspace(stackDir);
@@ -77,6 +78,7 @@ public static class StackCleanupService
         IReadOnlyList<string>? composeFiles)
     {
         var resources = new HashSet<string>(StringComparer.Ordinal);
+        var env = DockerCompose.GetComposeEnv(composeDir);
 
         var args = new List<string> { "compose" };
         if (composeFiles != null)
@@ -93,7 +95,7 @@ public static class StackCleanupService
         args.Add("config");
         args.Add($"--{kind}");
 
-        var (stdout, stderr, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, args.ToArray());
+        var (stdout, stderr, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, args.ToArray(), env);
         if (exit != 0)
         {
             Console.WriteLine($"[cleanup] docker compose config --{kind} failed: {stderr.Trim()}");
@@ -133,12 +135,40 @@ public static class StackCleanupService
         }
     }
 
+    static async Task RemoveExpectedExternalResourcesAsync(string? stackName)
+    {
+        if (string.IsNullOrWhiteSpace(stackName))
+            return;
+
+        var normalizedStackName = stackName.Trim();
+        var volumes = new[]
+        {
+            $"postgres_data_auto_release_{normalizedStackName}",
+            $"master_postgres_data_auto_release_{normalizedStackName}",
+            $"rabbit_data_auto_release_{normalizedStackName}",
+        };
+        var networks = new[]
+        {
+            $"web_auto_release_{normalizedStackName}",
+        };
+
+        Console.WriteLine(
+            $"[cleanup] ожидаемые external-ресурсы по stackName: volumes={volumes.Length}, networks={networks.Length}, stackName={normalizedStackName}");
+
+        foreach (var volume in volumes)
+            await TryRemoveVolumeAsync(volume);
+
+        foreach (var network in networks)
+            await TryRemoveNetworkAsync(network);
+    }
+
     static async Task<(HashSet<string> Volumes, HashSet<string> Networks)> GetExternalResourceNamesAsync(
         string composeDir,
         IReadOnlyList<string>? composeFiles)
     {
         var volumes = new HashSet<string>(StringComparer.Ordinal);
         var networks = new HashSet<string>(StringComparer.Ordinal);
+        var env = DockerCompose.GetComposeEnv(composeDir);
 
         var args = new List<string> { "compose" };
         if (composeFiles != null)
@@ -156,7 +186,7 @@ public static class StackCleanupService
         args.Add("--format");
         args.Add("json");
 
-        var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, args.ToArray());
+        var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, args.ToArray(), env);
         if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
             return (volumes, networks);
 
@@ -222,7 +252,7 @@ public static class StackCleanupService
         var (_, stderr, exit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
-            "volume", "rm", volumeName);
+            ["volume", "rm", volumeName]);
 
         if (exit == 0)
             Console.WriteLine($"[cleanup] volume удалён: {volumeName}");
@@ -240,7 +270,7 @@ public static class StackCleanupService
         var (_, stderr, exit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
-            "network", "rm", networkName);
+            ["network", "rm", networkName]);
 
         if (exit == 0)
             Console.WriteLine($"[cleanup] network удалена: {networkName}");
@@ -251,7 +281,8 @@ public static class StackCleanupService
     static async Task<(string stdout, string stderr, int exitCode)> RunProcessCaptureAsync(
         string workingDir,
         string fileName,
-        params string[] args)
+        string[] args,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -262,6 +293,11 @@ public static class StackCleanupService
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
+        if (env is not null)
+        {
+            foreach (var kv in env)
+                psi.Environment[kv.Key] = kv.Value;
+        }
         foreach (var a in args)
             psi.ArgumentList.Add(a);
 

@@ -13,16 +13,17 @@ public sealed partial class StartStackService
     }
 
     public async Task<StartStackResult> ExecuteAsync(
-        string? rawTag,
+        string? rawStackName,
+        string? rawVersion,
         CancellationToken ct = default)
     {
-        var context = BuildContext(rawTag);
+        var context = BuildContext(rawStackName, rawVersion);
         if (context is null)
-            return StartStackResult.Fail("Нужен tag");
+            return StartStackResult.Fail("Нужны stackName и version");
 
         try
         {
-            Console.WriteLine($"[start-stack] этап=begin tag={context.Tag} dir={context.StackDir}");
+            Console.WriteLine($"[start-stack] этап=begin stackName={context.StackName} dir={context.StackDir}");
 
             Console.WriteLine("[start-stack] этап=precheck");
             var precheckError = await EnsureNotRunningAsync(context);

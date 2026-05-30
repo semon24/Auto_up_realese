@@ -30,7 +30,7 @@ public static partial class DockerCompose
     public static async Task RunAsync(string composeDir, IReadOnlyList<string>? composeFiles = null, params string[] args)
     {
         var all = BuildComposeArgs(composeFiles, args);
-        await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray());
+        await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray(), env: GetComposeEnv(composeDir));
     }
 
     public static async Task<bool> IsRunningAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
@@ -38,7 +38,8 @@ public static partial class DockerCompose
         try
         {
             var allServicesArgs = BuildComposeArgs(composeFiles, "config", "--services");
-            var (allServicesOut, _, allExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, allServicesArgs.ToArray());
+            var env = GetComposeEnv(composeDir);
+            var (allServicesOut, _, allExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, allServicesArgs.ToArray(), env);
 
             if (allExit != 0)
                 return false;
@@ -52,9 +53,9 @@ public static partial class DockerCompose
                 return false;
 
             var runningArgs = BuildComposeArgs(composeFiles, "ps", "--status", "running", "--services");
-            var (runningOut, _, runningExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, runningArgs.ToArray());
+            var (runningOut, _, runningExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, runningArgs.ToArray(), env);
             var exitedArgs = BuildComposeArgs(composeFiles, "ps", "--status", "exited", "--services");
-            var (exitedOut, _, exitedExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, exitedArgs.ToArray());
+            var (exitedOut, _, exitedExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, exitedArgs.ToArray(), env);
 
             if (runningExit != 0 || exitedExit != 0)
                 return false;
@@ -84,7 +85,11 @@ public static partial class DockerCompose
         try
         {
             var psArgs = BuildComposeArgs(composeFiles, "ps", "--all", "--format", "json");
-            var (stdout, _, exit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, psArgs.ToArray());
+            var (stdout, _, exit) = await RunProcessCaptureAsync(
+                composeDir,
+                DockerComposeCli,
+                psArgs.ToArray(),
+                GetComposeEnv(composeDir));
 
             if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
                 return result;
@@ -123,7 +128,7 @@ public static partial class DockerCompose
             var (stdout, _, exit) = await RunProcessCaptureAsync(
                 Directory.GetCurrentDirectory(),
                 DockerCli,
-                "ps", "--format", "{{.Ports}}");
+                ["ps", "--format", "{{.Ports}}"]);
 
             if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
                 return new HashSet<int>();
@@ -161,5 +166,21 @@ public static partial class DockerCompose
         if (element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String)
             return value.GetString();
         return null;
+    }
+
+    internal static IReadOnlyDictionary<string, string>? GetComposeEnv(string composeDir)
+    {
+        if (string.IsNullOrWhiteSpace(composeDir))
+            return null;
+
+        var envFilePath = Path.Combine(composeDir, ".env");
+        var stackName = EnvFile.ReadTag(envFilePath, "STACK_NAME");
+        if (string.IsNullOrWhiteSpace(stackName))
+            return null;
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["STACK_NAME"] = stackName.Trim()
+        };
     }
 }

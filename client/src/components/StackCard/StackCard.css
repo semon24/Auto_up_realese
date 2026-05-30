@@ -18,6 +18,13 @@
   gap: 0.5rem;
 }
 
+.stack-card__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
 .stack-card:focus,
 .stack-card:focus-visible {
   outline: none;
@@ -47,6 +54,14 @@
 .stack-card__tag {
   font-size: 0.95rem;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stack-card__version {
+  font-size: 0.78rem;
+  color: #8b949e;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

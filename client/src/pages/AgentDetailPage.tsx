@@ -57,6 +57,18 @@ function isReadonlyAgent(type?: string | null) {
   return type?.trim().toLowerCase() === "readonly";
 }
 
+function buildStackName(projectName: string) {
+  const normalized = projectName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+
+  const randomSuffix = Math.floor(100000 + Math.random() * 900000).toString();
+  return normalized ? `${normalized}-${randomSuffix}` : randomSuffix;
+}
+
 export function AgentDetailPage() {
   const { hostName: hostNameParam, tag: tagParam } = useParams();
   const navigate = useNavigate();
@@ -108,7 +120,9 @@ export function AgentDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [launchTag, setLaunchTag] = useState("");
+  const [launchProjectName, setLaunchProjectName] = useState("");
+  const [launchVersion, setLaunchVersion] = useState("");
+  const [launchDomain, setLaunchDomain] = useState("");
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [launchOk, setLaunchOk] = useState<string | null>(null);
@@ -267,10 +281,25 @@ export function AgentDetailPage() {
     setLaunchError(null);
     setLaunchOk(null);
     setLaunchLinks(null);
-    if (!launchTag.trim()) {
-    setLaunchError("Введите тег для запуска");
+    const projectName = launchProjectName.trim();
+    const version = launchVersion.trim();
+    const domain = launchDomain.trim();
+
+    if (!projectName) {
+      setLaunchError("Введите имя проекта");
       return;
     }
+
+    if (!version) {
+      setLaunchError("Введите версию для запуска");
+      return;
+    }
+
+    if (!domain) {
+      setLaunchError("Введите домен или IP");
+      return;
+    }
+    const stackName = buildStackName(projectName);
     setManagedProjectOverride(null);
     setLaunching(true);
     try {
@@ -279,15 +308,17 @@ export function AgentDetailPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            tag: launchTag.trim(),
+            stackName,
+            version,
+            domain,
           }),
         }
       );
       setLaunchOk("Команда запуска отправлена агенту.");
       setLaunchLinks(res.payload?.serviceLinks ?? null);
-      setLastStartedTag(launchTag.trim());
+      setLastStartedTag(stackName);
       void navigate(
-        `/agents/${encodeURIComponent(hostName)}/${encodeURIComponent(launchTag.trim())}`
+        `/agents/${encodeURIComponent(hostName)}/${encodeURIComponent(stackName)}`
       );
       await loadStatus();
     } catch (err) {
@@ -309,7 +340,7 @@ export function AgentDetailPage() {
         `/api/agents/${encodeURIComponent(hostName)}/docker-compose-down`,
         {
           method: "POST",
-          body: JSON.stringify({ tag: managedTag }),
+          body: JSON.stringify({ stackName: managedTag }),
         }
       );
       setLaunchOk(`Проект ${managedTag} выключен.`);
@@ -338,7 +369,7 @@ export function AgentDetailPage() {
         `/api/agents/${encodeURIComponent(hostName)}/docker-compose-stop`,
         {
           method: "POST",
-          body: JSON.stringify({ tag: managedTag }),
+          body: JSON.stringify({ stackName: managedTag }),
         }
       );
       setLaunchOk(`Проект ${managedTag} остановлен.`);
@@ -361,13 +392,18 @@ export function AgentDetailPage() {
     setLaunchError(null);
     setLaunchOk(null);
     setManagedProjectOverride(null);
+    const version = managedStack?.version?.trim();
+    if (!version) {
+      setLaunchError("Для этого стека не найдена версия. Обновите статус.");
+      return;
+    }
     setPausingProject(true);
     try {
       const res = await api<DockerComposeUpResponse>(
         `/api/agents/${encodeURIComponent(hostName)}/docker-compose-up`,
         {
           method: "POST",
-          body: JSON.stringify({ tag: managedTag }),
+          body: JSON.stringify({ stackName: managedTag, version }),
         }
       );
       setLaunchOk(`Проект ${managedTag} поднимается.`);
@@ -397,7 +433,7 @@ export function AgentDetailPage() {
         `/api/agents/${encodeURIComponent(hostName)}/docker-compose-restart`,
         {
           method: "POST",
-          body: JSON.stringify({ tag: managedTag }),
+          body: JSON.stringify({ stackName: managedTag }),
         }
       );
       setLaunchOk(`Проект ${managedTag} перезапущен.`);
@@ -433,7 +469,7 @@ export function AgentDetailPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            tag: managedTag,
+            stackName: managedTag,
             domains,
           }),
         }
@@ -461,7 +497,7 @@ export function AgentDetailPage() {
         {
           method: "POST",
           body: JSON.stringify({
-            tag: managedTag,
+            stackName: managedTag,
             domain,
           }),
         }
@@ -623,6 +659,7 @@ export function AgentDetailPage() {
                     (() => {
                       const stackForTag =
                         agentStacks.find((stack) => stack.tag === tag) ?? null;
+                      const stackVersion = stackForTag?.version?.trim() ?? "";
                       const isInProgressTag =
                         isPendingOperationStatus(stackForTag?.operationStatus);
                       const isSuccessTag =
@@ -658,7 +695,12 @@ export function AgentDetailPage() {
                               )
                             }
                           >
-                            {tag}
+                            <span className="agent-detail__tag-nav-name">{tag}</span>
+                            {stackVersion ? (
+                              <span className="agent-detail__tag-nav-version">
+                                {stackVersion}
+                              </span>
+                            ) : null}
                           </button>
                           {isSuccessTag && stackForTag?.serviceLinks?.admin && (
                             <a
@@ -690,17 +732,29 @@ export function AgentDetailPage() {
                     className="agent-detail__form agent-detail__form--launch"
                     onSubmit={(e) => void onLaunch(e)}
                   >
-                    <label className="agent-detail__label" htmlFor="agent-launch-tag">
-                      Тег образа
+                    <label className="agent-detail__label" htmlFor="agent-launch-project-name">
+                      Имя проекта
                     </label>
                     <input
-                      id="agent-launch-tag"
+                      id="agent-launch-project-name"
+                      type="text"
+                      className="agent-detail__input"
+                      value={launchProjectName}
+                      onChange={(e) => setLaunchProjectName(e.target.value)}
+                      placeholder="Например, demo"
+                      autoComplete="off"
+                    />
+                    <label className="agent-detail__label" htmlFor="agent-launch-version">
+                      Версия образа
+                    </label>
+                    <input
+                      id="agent-launch-version"
                       list="agent-launch-tags"
                       type="text"
                       className="agent-detail__input"
-                      value={launchTag}
-                      onChange={(e) => setLaunchTag(e.target.value)}
-                      placeholder="Введите или выберите тег"
+                      value={launchVersion}
+                      onChange={(e) => setLaunchVersion(e.target.value)}
+                      placeholder="Введите или выберите версию"
                       autoComplete="off"
                     />
                     <datalist id="agent-launch-tags">
@@ -708,6 +762,18 @@ export function AgentDetailPage() {
                         <option key={item.tag} value={item.tag} />
                       ))}
                     </datalist>
+                    <label className="agent-detail__label" htmlFor="agent-launch-domain">
+                      Домен или IP
+                    </label>
+                    <input
+                      id="agent-launch-domain"
+                      type="text"
+                      className="agent-detail__input"
+                      value={launchDomain}
+                      onChange={(e) => setLaunchDomain(e.target.value)}
+                      placeholder="Например, example.com или 91.201.53.51"
+                      autoComplete="off"
+                    />
                     {tagsError && (
                       <p className="agent-detail__error">{tagsError}</p>
                     )}
@@ -747,7 +813,14 @@ export function AgentDetailPage() {
         !isDisconnected &&
         agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED && (
         <section className="agent-detail__tag-page">
-          <h2 className="agent-detail__tag-title">{managedTag}</h2>
+          <div className="agent-detail__tag-head">
+            <h2 className="agent-detail__tag-title">{managedTag}</h2>
+            {managedStack?.version?.trim() ? (
+              <p className="agent-detail__tag-version">
+                Версия: <strong>{managedStack.version.trim()}</strong>
+              </p>
+            ) : null}
+          </div>
           <p className={managedOperationStatusClassName}>
             Статус запуска:{" "}
             <strong>

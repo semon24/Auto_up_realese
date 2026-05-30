@@ -19,7 +19,7 @@ internal static class DockerComposeUpSignalRMessages
                     return Task.CompletedTask;
 
                 Console.WriteLine(
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_up: id={request.Id}, tag={request.Tag?.Trim() ?? "<null>"}");
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_up: id={request.Id}, StackName={request.StackName?.Trim() ?? "<null>"}, Version={request.Version?.Trim() ?? "<null>"}");
 
                 _ = RunDockerComposeUpAsync(connection, startStackService, request);
                 return Task.CompletedTask;
@@ -34,7 +34,8 @@ internal static class DockerComposeUpSignalRMessages
         try
         {
             var result = await startStackService.ExecuteAsync(
-                request.Tag,
+                request.StackName,
+                request.Version,
                 CancellationToken.None);
 
             Console.WriteLine(
@@ -72,6 +73,7 @@ internal static class DockerComposeUpSignalRMessages
     private sealed class DockerComposeUpRequest
     {
         public string? Id { get; set; }
-        public string? Tag { get; set; }
+        public string? StackName { get; set; }
+        public string? Version { get; set; }
     }
 }

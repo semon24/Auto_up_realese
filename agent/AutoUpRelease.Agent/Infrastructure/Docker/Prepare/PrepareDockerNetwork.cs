@@ -15,7 +15,7 @@ public static partial class DockerCompose
         var (_, _, inspectExit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
-            "network", "inspect", networkName);
+            ["network", "inspect", networkName]);
 
         if (inspectExit == 0)
             return;

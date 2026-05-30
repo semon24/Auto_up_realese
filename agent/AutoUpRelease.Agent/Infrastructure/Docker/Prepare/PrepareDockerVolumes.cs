@@ -15,7 +15,7 @@ public static partial class DockerCompose
         var (_, _, inspectExit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
-            "volume", "inspect", volumeName);
+            ["volume", "inspect", volumeName]);
 
         return inspectExit == 0;
     }
@@ -28,7 +28,7 @@ public static partial class DockerCompose
         var (_, _, inspectExit) = await RunProcessCaptureAsync(
             Directory.GetCurrentDirectory(),
             DockerCli,
-            "volume", "inspect", volumeName);
+            ["volume", "inspect", volumeName]);
 
         if (inspectExit == 0)
             return;

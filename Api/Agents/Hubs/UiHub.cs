@@ -114,6 +114,7 @@ public sealed class UiHub(
         new(
             tag,
             snapshot.Running,
+            snapshot.Version,
             snapshot.OperationType,
             snapshot.OperationStatus,
             snapshot.OperationError,
@@ -152,8 +153,9 @@ public sealed class UiHub(
 }
 
 public sealed record RuntimeStackDto(
-    string Tag,
+    string StackName,
     bool Running,
+    string? Version,
     string? OperationType,
     string? OperationStatus,
     string? OperationError,

@@ -8,11 +8,18 @@ public sealed partial class StartStackService
         RunAndWaitReadyAsync(StartStackContext context, CancellationToken ct)
     {
         Console.WriteLine($"[start-stack] этап=write_tag file={context.StackEnvFile}");
-        await EnvFile.WriteTagAsync(context.StackEnvFile, _options.ImageEnvKey, context.Tag);
+        await EnvFile.WriteTagAsync(context.StackEnvFile, _options.ImageEnvKey, context.Version);
 
         Console.WriteLine($"[start-stack] этап=docker_compose_up dir={context.StackDir}");
+
+        var composeEnv = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["STACK_NAME"] = context.StackName
+        };
+
         await DockerCompose.RunUpDetachedWithDiagnosticsAsync(
             context.StackDir,
+            composeEnv,
             onProgress: servicesState => SaveProgressStateAsync(context, servicesState),
             progressPollInterval: TimeSpan.FromSeconds(2));
 
@@ -36,11 +43,11 @@ public sealed partial class StartStackService
     {
         await StackStateStore.SaveStackServicesStateAsync(
             context.StackStateFile,
-            context.Tag,
+            context.StackName,
             servicesState);
         await StackStateStore.SetOperationAsync(
             context.StackStateFile,
-            context.Tag,
+            context.StackName,
             operationType: "start",
             operationStatus: "in_progress");
     }

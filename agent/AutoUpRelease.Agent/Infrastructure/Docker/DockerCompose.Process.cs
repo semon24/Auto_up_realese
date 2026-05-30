@@ -24,7 +24,12 @@ public static partial class DockerCompose
         return all;
     }
 
-    static async Task RunProcessAsync(string workingDir, string fileName, string[] args, string? stdin = null)
+    static async Task RunProcessAsync(
+        string workingDir,
+        string fileName,
+        string[] args,
+        string? stdin = null,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         if (IsDockerComposeCommand(fileName, args))
             Console.WriteLine($"[docker] exec: {FormatCommand(fileName, args)} (cwd={workingDir})");
@@ -38,6 +43,11 @@ public static partial class DockerCompose
             RedirectStandardInput = stdin != null,
             CreateNoWindow = true,
         };
+        if (env is not null)
+        {
+            foreach (var kv in env)
+                psi.Environment[kv.Key] = kv.Value;
+        }
         foreach (var a in args)
             psi.ArgumentList.Add(a);
 
@@ -68,7 +78,8 @@ public static partial class DockerCompose
     static async Task<(string stdout, string stderr, int exitCode)> RunProcessCaptureAsync(
         string workingDir,
         string fileName,
-        params string[] args)
+        string[] args,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         if (IsDockerComposeCommand(fileName, args))
             Console.WriteLine($"[docker] exec(capture): {FormatCommand(fileName, args)} (cwd={workingDir})");
@@ -82,6 +93,13 @@ public static partial class DockerCompose
             RedirectStandardError = true,
             CreateNoWindow = true,
         };
+
+        if (env is not null)
+        {
+            foreach (var kv in env)
+                psi.Environment[kv.Key] = kv.Value;
+        }
+
         foreach (var a in args)
             psi.ArgumentList.Add(a);
 

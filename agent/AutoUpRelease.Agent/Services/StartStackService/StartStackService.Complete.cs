@@ -9,13 +9,13 @@ public sealed partial class StartStackService
         IReadOnlyDictionary<string, DockerServiceState> servicesState)
     {
         var serviceLinks = DeployEnvLinks.TryRead(context.StackEnvFile, _options.ServiceLinkEnvKeys);
-        await StackStateStore.SaveStackServicesStateAsync(context.StackStateFile, context.Tag, servicesState);
+        await StackStateStore.SaveStackServicesStateAsync(context.StackStateFile, context.StackName, servicesState);
         await StackStateStore.SetOperationAsync(
             context.StackStateFile,
-            context.Tag,
+            context.StackName,
             operationType: "start",
             operationStatus: "success");
-        await StackStateStore.SetServiceLinksAsync(context.StackStateFile, context.Tag, serviceLinks);
+        await StackStateStore.SetServiceLinksAsync(context.StackStateFile, context.StackName, serviceLinks);
         await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
             context.DeployProjectsDir,
             context.StateFileName,
@@ -30,7 +30,7 @@ public sealed partial class StartStackService
     {
         await StackStateStore.SetOperationAsync(
             context.StackStateFile,
-            context.Tag,
+            context.StackName,
             operationType: "start",
             operationStatus: "deleting",
             error: error);
@@ -41,7 +41,7 @@ public sealed partial class StartStackService
             _options.AgentHostName,
             _options.ServiceLinkEnvKeys);
 
-        await StackCleanupService.CleanupStackAsync(context.StackDir);
+        await StackCleanupService.CleanupStackAsync(context.StackDir, context.StackName);
         await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
             context.DeployProjectsDir,
             context.StateFileName,

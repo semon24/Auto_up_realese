@@ -263,16 +263,16 @@ services:
 
 volumes:
   postgres_data_auto_release:
-    name: postgres_data_auto_release_${VNEOCHEREDI_VERSION}
+    name: postgres_data_auto_release_${STACK_NAME}
     external: true
   master_postgres_data_auto_release:
-    name: master_postgres_data_auto_release_${VNEOCHEREDI_VERSION}
+    name: master_postgres_data_auto_release_${STACK_NAME}
     external: true
   rabbit_data_auto_release:
-    name: rabbit_data_auto_release_${VNEOCHEREDI_VERSION}
+    name: rabbit_data_auto_release_${STACK_NAME}
     external: true
 
 networks:
   web_auto_release:
-    name: web_auto_release_${VNEOCHEREDI_VERSION}
+    name: web_auto_release_${STACK_NAME}
     external: true

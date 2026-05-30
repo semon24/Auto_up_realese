@@ -2,13 +2,13 @@ namespace AutoUpRelease.Agent;
 
 public static class StackWorkspaceManager
 {
-    public static string GetStackDir(string deployProjectsDir, string tag) => Path.Combine(deployProjectsDir, tag);
+    public static string GetStackDir(string deployProjectsDir, string stackName) => Path.Combine(deployProjectsDir, stackName);
 
-    public static string GetStackEnvFile(string deployProjectsDir, string tag) =>
-        Path.Combine(GetStackDir(deployProjectsDir, tag), ".env");
+    public static string GetStackEnvFile(string deployProjectsDir, string stackName) =>
+        Path.Combine(GetStackDir(deployProjectsDir, stackName), ".env");
 
-    public static string GetStackStateFile(string deployProjectsDir, string tag, string stateFileName) =>
-        Path.Combine(GetStackDir(deployProjectsDir, tag), stateFileName);
+    public static string GetStackStateFile(string deployProjectsDir, string stackName, string stateFileName) =>
+        Path.Combine(GetStackDir(deployProjectsDir, stackName), stateFileName);
 
     public static void EnsureStackWorkspace(string folderForCopyDir, string stackDir)
     {

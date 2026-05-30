@@ -102,10 +102,13 @@ function parseStackItem(hostName: string, tag: string, stack: JsonRecord): Stack
     (service) => service.state.toLowerCase() === "running"
   );
   const running = readBoolean(stack, "running") || runningFromServices;
+  const stackName = readString(stack, "stackName", "StackName") ?? tag;
 
   return {
     hostName,
-    tag,
+    tag: stackName,
+    stackName,
+    version: readString(stack, "version", "Version"),
     running,
     operationType: readString(stack, "operationType", "OperationType"),
     operationStatus: readString(stack, "operationStatus", "OperationStatus"),

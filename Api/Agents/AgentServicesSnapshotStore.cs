@@ -82,6 +82,7 @@ public sealed class AgentServicesSnapshotStore
             var stack = stackProp.Value;
             var services = ParseServices(stack);
             var running = GetBoolean(stack, "running");
+            var version = GetString(stack, "version", "Version");
             var operationType = GetString(stack, "operationType");
             var operationStatus = GetString(stack, "operationStatus");
             var operationError = GetString(stack, "operationError");
@@ -92,6 +93,7 @@ public sealed class AgentServicesSnapshotStore
             result[tag] = new StackSnapshot
             {
                 Running = running || services.Values.Any(s => string.Equals(s.State, "running", StringComparison.OrdinalIgnoreCase)),
+                Version = version,
                 OperationType = operationType,
                 OperationStatus = operationStatus,
                 OperationError = operationError,
@@ -233,6 +235,7 @@ public sealed class AgentServicesSnapshotStore
 public sealed class StackSnapshot
 {
     public bool Running { get; init; }
+    public string? Version { get; init; }
     public string? OperationType { get; init; }
     public string? OperationStatus { get; init; }
     public string? OperationError { get; init; }

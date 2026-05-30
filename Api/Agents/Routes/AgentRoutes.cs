@@ -56,13 +56,19 @@ public static class AgentRoutes
             if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
                 return readonlyError;
 
-            var tag = body?.Tag?.Trim();
-            if (string.IsNullOrEmpty(tag))
-                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
+            
+            var version = body?.Version?.Trim();
+            if (string.IsNullOrEmpty(version))
+                return Results.Json(new { error = "Нужен version" }, statusCode: 400);
+
 
             var (ok, error, payload) = await sessions.StartDockerComposeUpWithAgentAsync(
                 hostName,
-                tag,
+                stackName,
+                version,
                 TimeSpan.FromMinutes(15),
                 ct);
 
@@ -82,13 +88,14 @@ public static class AgentRoutes
             if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
                 return readonlyError;
 
-            var tag = body?.Tag?.Trim();
-            if (string.IsNullOrEmpty(tag))
-                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
+
 
             var (ok, error, payload) = await sessions.StartDockerComposeDownWithAgentAsync(
                 hostName,
-                tag,
+                stackName,
                 TimeSpan.FromMinutes(15),
                 ct);
 
@@ -108,13 +115,13 @@ public static class AgentRoutes
             if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
                 return readonlyError;
 
-            var tag = body?.Tag?.Trim();
-            if (string.IsNullOrEmpty(tag))
-                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
 
             var (ok, error, payload) = await sessions.StartDockerComposeRestartWithAgentAsync(
                 hostName,
-                tag,
+                stackName,
                 TimeSpan.FromMinutes(15),
                 ct);
 
@@ -134,13 +141,13 @@ public static class AgentRoutes
             if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
                 return readonlyError;
 
-            var tag = body?.Tag?.Trim();
-            if (string.IsNullOrEmpty(tag))
-                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
 
             var (ok, error, payload) = await sessions.StartDockerComposeStopWithAgentAsync(
                 hostName,
-                tag,
+                stackName,
                 TimeSpan.FromMinutes(15),
                 ct);
 
@@ -161,9 +168,9 @@ public static class AgentRoutes
             if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
                 return readonlyError;
 
-            var tag = body?.Tag?.Trim();
-            if (string.IsNullOrEmpty(tag))
-                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
 
             var domains = body?.Domains?
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -175,7 +182,7 @@ public static class AgentRoutes
 
             var (ok, error, payload) = await sessions.StartAddDomainsWithAgentAsync(
                 hostName,
-                tag,
+                stackName,
                 domains,
                 TimeSpan.FromMinutes(15),
                 ct);
@@ -183,7 +190,7 @@ public static class AgentRoutes
             if (!ok)
                 return Results.Json(new { error = error ?? "Ошибка добавления доменов на агенте" }, statusCode: 400);
 
-            await sslCertificateRefreshService.RefreshStackAsync(hostName, tag, ct);
+            await sslCertificateRefreshService.RefreshStackAsync(hostName, stackName, ct);
 
             return Results.Json(new { ok = true, payload });
         });
@@ -199,9 +206,9 @@ public static class AgentRoutes
             if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
                 return readonlyError;
 
-            var tag = body?.Tag?.Trim();
-            if (string.IsNullOrEmpty(tag))
-                return Results.Json(new { error = "Нужен tag" }, statusCode: 400);
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
 
             var domain = body?.Domain?.Trim();
             if (string.IsNullOrEmpty(domain))
@@ -209,7 +216,7 @@ public static class AgentRoutes
 
             var (ok, error, payload) = await sessions.StartDeleteDomainWithAgentAsync(
                 hostName,
-                tag,
+                stackName,
                 domain,
                 TimeSpan.FromMinutes(15),
                 ct);
@@ -217,7 +224,7 @@ public static class AgentRoutes
             if (!ok)
                 return Results.Json(new { error = error ?? "Ошибка удаления домена на агенте" }, statusCode: 400);
 
-            await sslCertificateRefreshService.RefreshStackAsync(hostName, tag, ct);
+            await sslCertificateRefreshService.RefreshStackAsync(hostName, stackName, ct);
 
             return Results.Json(new { ok = true, payload });
         });

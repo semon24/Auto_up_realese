@@ -1,7 +1,8 @@
 namespace AutoUpRelease.Agent.Services.StartStackService;
 
 sealed record StartStackContext(
-    string Tag,
+    string StackName,
+    string Version,
     string DeployProjectsDir,
     string FolderForCopyDir,
     string StateFileName,

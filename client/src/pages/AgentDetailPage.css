@@ -270,6 +270,9 @@
 }
 
 .agent-detail__tag-nav-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
   padding: 0.42rem 0.72rem;
   border-radius: 8px;
   border: none;
@@ -279,6 +282,17 @@
   text-align: center;
   font-weight: 600;
   font-size: 1.05rem;
+}
+
+.agent-detail__tag-nav-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.agent-detail__tag-nav-version {
+  font-size: 0.78rem;
+  color: #8b949e;
+  font-weight: 500;
 }
 
 .agent-detail__tag-nav-btn:disabled {
@@ -379,10 +393,26 @@
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 }
 
+.agent-detail__tag-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .agent-detail__tag-title {
   margin: 0;
   color: #e6edf3;
   font-size: 1.05rem;
+}
+
+.agent-detail__tag-version {
+  margin: 0;
+  color: #8b949e;
+  font-size: 0.9rem;
+}
+
+.agent-detail__tag-version strong {
+  color: #c9d1d9;
 }
 
 .agent-detail__services-center {
