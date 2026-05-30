@@ -61,17 +61,22 @@ public sealed class StaleStartRecoveryService
 
         try
         {
+            var composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(stackStateFile, candidate.StackName);
             await DockerCompose.RunUpDetachedWithDiagnosticsAsync(
                 stackDir,
+                env: composeEnv,
                 onProgress: servicesState => SaveRecoveryProgressAsync(stackStateFile, candidate.StackName, servicesState),
-                progressPollInterval: TimeSpan.FromSeconds(2));
+                progressPollInterval: TimeSpan.FromSeconds(2),
+                stackName: candidate.StackName);
 
             var waitResult = await DockerCompose.WaitForServicesReadyAsync(
                 stackDir,
                 timeout: TimeSpan.FromSeconds(600),
                 pollInterval: TimeSpan.FromSeconds(2),
                 cancellationToken,
-                onProgress: servicesState => SaveRecoveryProgressAsync(stackStateFile, candidate.StackName, servicesState));
+                onProgress: servicesState => SaveRecoveryProgressAsync(stackStateFile, candidate.StackName, servicesState),
+                stackName: candidate.StackName,
+                env: composeEnv);
 
             if (!waitResult.IsReady)
             {

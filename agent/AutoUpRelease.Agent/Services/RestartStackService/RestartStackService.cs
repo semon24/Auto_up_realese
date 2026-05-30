@@ -31,10 +31,11 @@ public sealed class RestartStackService
         try
         {
             Console.WriteLine($"[restart-stack] этап=begin tag={tag} dir={stackDir}");
+            var composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(stackStateFile, tag);
 
             await SetOperationAsync(stackStateFile, tag, "stopping");
             Console.WriteLine("[restart-stack] этап=stop");
-            await DockerCompose.RunStopAsync(stackDir);
+            await DockerCompose.RunStopAsync(stackDir, stackName: tag, env: composeEnv);
 
             Console.WriteLine("[restart-stack] этап=wait_stopped timeout_sec=600 poll_sec=2");
             var stopWaitResult = await DockerCompose.WaitForServicesStoppedAsync(
@@ -42,7 +43,9 @@ public sealed class RestartStackService
                 timeout: TimeSpan.FromSeconds(600),
                 pollInterval: TimeSpan.FromSeconds(2),
                 ct,
-                onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "stopping", servicesState));
+                onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "stopping", servicesState),
+                stackName: tag,
+                env: composeEnv);
             if (!stopWaitResult.IsStopped)
             {
                 Console.WriteLine($"[restart-stack] этап=wait_stopped status=failed reason={stopWaitResult.Reason ?? "<unknown>"}");
@@ -54,8 +57,10 @@ public sealed class RestartStackService
             Console.WriteLine("[restart-stack] этап=up");
             await DockerCompose.RunUpDetachedWithDiagnosticsAsync(
                 stackDir,
+                env: composeEnv,
                 onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "starting", servicesState),
-                progressPollInterval: TimeSpan.FromSeconds(2));
+                progressPollInterval: TimeSpan.FromSeconds(2),
+                stackName: tag);
 
             Console.WriteLine("[restart-stack] этап=wait_ready timeout_sec=600 poll_sec=2");
             var waitResult = await DockerCompose.WaitForServicesReadyAsync(
@@ -63,7 +68,9 @@ public sealed class RestartStackService
                 timeout: TimeSpan.FromSeconds(600),
                 pollInterval: TimeSpan.FromSeconds(2),
                 ct,
-                onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "starting", servicesState));
+                onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "starting", servicesState),
+                stackName: tag,
+                env: composeEnv);
             if (!waitResult.IsReady)
             {
                 Console.WriteLine($"[restart-stack] этап=wait_ready status=failed reason={waitResult.Reason ?? "<unknown>"}");

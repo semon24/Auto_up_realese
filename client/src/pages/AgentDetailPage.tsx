@@ -294,11 +294,6 @@ export function AgentDetailPage() {
       setLaunchError("Введите версию для запуска");
       return;
     }
-
-    if (!domain) {
-      setLaunchError("Введите домен или IP");
-      return;
-    }
     const stackName = buildStackName(projectName);
     setManagedProjectOverride(null);
     setLaunching(true);
@@ -310,7 +305,7 @@ export function AgentDetailPage() {
           body: JSON.stringify({
             stackName,
             version,
-            domain,
+            domain: domain || null,
           }),
         }
       );
@@ -771,7 +766,7 @@ export function AgentDetailPage() {
                       className="agent-detail__input"
                       value={launchDomain}
                       onChange={(e) => setLaunchDomain(e.target.value)}
-                      placeholder="Например, example.com или 91.201.53.51"
+                      placeholder="Необязательно. Если пусто, будет использован IP агента"
                       autoComplete="off"
                     />
                     {tagsError && (

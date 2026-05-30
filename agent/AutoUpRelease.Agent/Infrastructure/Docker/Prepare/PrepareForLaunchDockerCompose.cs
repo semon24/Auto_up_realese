@@ -12,9 +12,6 @@ public static partial class DockerCompose
     {
         var updates = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        if (!string.IsNullOrWhiteSpace(StackName))
-            updates["STACK_NAME"] = StackName;
-
         if (!string.IsNullOrWhiteSpace(imageEnvKey) && string.IsNullOrWhiteSpace(EnvFile.ReadTag(envFilePath, imageEnvKey)))
             updates[imageEnvKey] = Version;
 

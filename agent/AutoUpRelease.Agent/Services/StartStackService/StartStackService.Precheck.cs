@@ -4,7 +4,7 @@ namespace AutoUpRelease.Agent.Services.StartStackService;
 
 public sealed partial class StartStackService
 {
-    private StartStackContext? BuildContext(string? rawStackName, string? rawVersion)
+    private StartStackContext? BuildContext(string? rawStackName, string? rawVersion, string? rawDomain)
     {
         var stackName = rawStackName?.Trim();
         if (string.IsNullOrEmpty(stackName))
@@ -13,7 +13,11 @@ public sealed partial class StartStackService
         var version = rawVersion?.Trim();
         if (string.IsNullOrEmpty(version))
             return null;
-
+        
+        var domain = rawDomain?.Trim();
+        if (string.IsNullOrWhiteSpace(domain))
+            domain = null;
+            
         var deployProjectsDir = _options.ProjectDeploymentPath.Trim();
         var folderForCopyDir = _options.CopyFolderForDeployPath.Trim();
         var stateFileName = _options.StateProjectFileName.Trim();
@@ -24,6 +28,7 @@ public sealed partial class StartStackService
         return new StartStackContext(
             stackName,
             version,
+            domain,
             deployProjectsDir,
             folderForCopyDir,
             stateFileName,

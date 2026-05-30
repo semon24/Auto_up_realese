@@ -37,7 +37,8 @@ public static class StackStateStore
                 Operation = existingEntry?.Operation,
                 Ports = existingEntry?.Ports ?? new Dictionary<string, int>(StringComparer.Ordinal),
                 ServiceLinks = existingEntry?.ServiceLinks,
-                ServiceDomains = existingEntry?.ServiceDomains
+                ServiceDomains = existingEntry?.ServiceDomains,
+                Domain = existingEntry?.Domain
             };
 
             await WriteModelAsync(stateFilePath, model);
@@ -133,6 +134,37 @@ public static class StackStateStore
                 entry = new StackEntry();
 
             entry.Version = normalizedVersion;
+            model.Stack[stackName] = entry;
+            await WriteModelAsync(stateFilePath, model);
+        }
+        finally
+        {
+            fileLock.Release();
+        }
+    }
+
+    public static async Task SetDomainAsync(
+        string stateFilePath,
+        string stackName,
+        string? domain)
+    {
+        var normalizedDomain = domain?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedDomain))
+            return;
+
+        var fileLock = GetFileLock(stateFilePath);
+        await fileLock.WaitAsync();
+        try
+        {
+            var dir = Path.GetDirectoryName(stateFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var model = await ReadModelAsync(stateFilePath);
+            if (!model.Stack.TryGetValue(stackName, out var entry))
+                entry = new StackEntry();
+
+            entry.Domain = normalizedDomain;
             model.Stack[stackName] = entry;
             await WriteModelAsync(stateFilePath, model);
         }
@@ -258,6 +290,22 @@ public static class StackStateStore
         {
             fileLock.Release();
         }
+    }
+
+    public static async Task<IReadOnlyDictionary<string, string>> GetComposeRuntimeEnvAsync(
+        string stateFilePath,
+        string stackName)
+    {
+        var env = new Dictionary<string, string>(StringComparer.Ordinal);
+        var normalizedStackName = stackName?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedStackName))
+            env["STACK_NAME"] = normalizedStackName;
+
+        var ports = await GetAllocatedPortsAsync(stateFilePath, stackName);
+        foreach (var port in ports)
+            env[port.Key] = port.Value.ToString();
+
+        return env;
     }
 
     public static async Task<bool> HasAnyRunningServicesAsync(string stateFilePath)
@@ -431,8 +479,8 @@ public static class StackStateStore
         public StackOperation? Operation { get; set; }
         public Dictionary<string, int> Ports { get; set; } = new(StringComparer.Ordinal);
         public DeployServiceLinks? ServiceLinks { get; set; }
-
         public List<string>? ServiceDomains { get; set; }
+        public string? Domain { get; set; }
     }
 
     sealed class StackOperation

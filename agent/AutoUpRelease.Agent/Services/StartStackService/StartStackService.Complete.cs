@@ -16,6 +16,34 @@ public sealed partial class StartStackService
             operationType: "start",
             operationStatus: "success");
         await StackStateStore.SetServiceLinksAsync(context.StackStateFile, context.StackName, serviceLinks);
+
+        var rootDomain = EnvFile.ReadTag(context.StackEnvFile, "DOMAIN")?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(rootDomain) && !System.Net.IPAddress.TryParse(rootDomain, out _))
+        {
+            var serviceNames = new[]
+            {
+                EnvFile.ReadTag(context.StackEnvFile, "ADMIN_SERVICE"),
+                EnvFile.ReadTag(context.StackEnvFile, "SERVER_SERVICE"),
+                EnvFile.ReadTag(context.StackEnvFile, "PORTAL_SERVICE"),
+                EnvFile.ReadTag(context.StackEnvFile, "CALL_SERVICE")
+            };
+
+            var serviceDomains = serviceNames
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!.Trim().ToLowerInvariant())
+                .Select(x => $"{x}.{rootDomain}")
+                .Distinct()
+                .ToList();
+
+            if (serviceDomains.Count > 0)
+            {
+                await StackStateStore.SetServiceDomainsAsync(
+                    context.StackStateFile,
+                    context.StackName,
+                    serviceDomains);
+            }
+        }
+
         await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
             context.DeployProjectsDir,
             context.StateFileName,
@@ -41,7 +69,10 @@ public sealed partial class StartStackService
             _options.AgentHostName,
             _options.ServiceLinkEnvKeys);
 
-        await StackCleanupService.CleanupStackAsync(context.StackDir, context.StackName);
+        await StackCleanupService.CleanupStackAsync(
+            context.StackDir,
+            context.StackName,
+            context.StackStateFile);
         await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
             context.DeployProjectsDir,
             context.StateFileName,

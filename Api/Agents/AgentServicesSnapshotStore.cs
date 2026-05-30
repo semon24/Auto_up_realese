@@ -88,6 +88,7 @@ public sealed class AgentServicesSnapshotStore
             var operationError = GetString(stack, "operationError");
             var serviceLinks = ParseServiceLinks(stack);
             var serviceDomains = ParseStringArray(stack, "serviceDomains");
+            var domains = GetString(stack, "domain");
 
 
             result[tag] = new StackSnapshot
@@ -99,6 +100,7 @@ public sealed class AgentServicesSnapshotStore
                 OperationError = operationError,
                 ServiceLinks = serviceLinks,
                 ServiceDomains = serviceDomains,
+                Domain = domains,
                 Services = services
             };
         }
@@ -242,5 +244,6 @@ public sealed class StackSnapshot
     public Dictionary<string, string>? ServiceLinks { get; init; }
     public Dictionary<string, DockerServiceState> Services { get; init; } = new(StringComparer.Ordinal);
     public List<string>? ServiceDomains { get; init; }
+    public string? Domain { get; set; }
     public IReadOnlyList<SslCertificateInfo>? Certificates { get; init; }
 }

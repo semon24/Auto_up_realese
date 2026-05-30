@@ -7,11 +7,13 @@ public static partial class DockerCompose
         TimeSpan pollInterval,
         Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
         IReadOnlyList<string>? composeFiles = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? stackName = null,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         while (!ct.IsCancellationRequested)
         {
-            var latest = await GetServicesStateAsync(composeDir, composeFiles);
+            var latest = await GetServicesStateAsync(composeDir, composeFiles, stackName, env);
             if (onProgress is not null)
                 await onProgress(latest);
 
@@ -33,7 +35,9 @@ public static partial class DockerCompose
             TimeSpan pollInterval,
             CancellationToken ct,
             Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
-            IReadOnlyList<string>? composeFiles = null)
+            IReadOnlyList<string>? composeFiles = null,
+            string? stackName = null,
+            IReadOnlyDictionary<string, string>? env = null)
     {
         var startedAt = DateTimeOffset.UtcNow;
         Dictionary<string, DockerServiceState> latest = new(StringComparer.Ordinal);
@@ -42,7 +46,7 @@ public static partial class DockerCompose
         {
             ct.ThrowIfCancellationRequested();
 
-            latest = await GetServicesStateAsync(composeDir, composeFiles);
+            latest = await GetServicesStateAsync(composeDir, composeFiles, stackName, env);
             if (onProgress is not null)
                 await onProgress(latest);
             if (latest.Count == 0)
@@ -50,7 +54,7 @@ public static partial class DockerCompose
                 // Fallback для сред, где `docker compose ps --format json` недоступен
                 // или возвращает неожиданный формат: проверяем готовность через
                 // сумму running + exited относительно общего числа сервисов.
-                if (await IsRunningAsync(composeDir, composeFiles))
+                if (await IsRunningAsync(composeDir, composeFiles, stackName, env))
                     return (true, false, null, latest);
 
                 await Task.Delay(pollInterval, ct);

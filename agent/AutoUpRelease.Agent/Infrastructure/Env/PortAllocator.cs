@@ -4,11 +4,10 @@ public static class PortAllocator
 {
     static readonly SemaphoreSlim AllocationLock = new(1, 1);
 
-    public static async Task<IReadOnlyDictionary<string, int>> AllocateAndWriteEnvAsync(
+    public static async Task<IReadOnlyDictionary<string, int>> AllocateAsync(
         string deployProjectsDir,
         string stateFileName,
         string stackName,
-        string envFilePath,
         IReadOnlyList<string> keys,
         int scanMin,
         int scanMax,
@@ -41,8 +40,6 @@ public static class PortAllocator
                 usedPorts.Add(port.Value);
             }
 
-            var asStrings = chosen.ToDictionary(kv => kv.Key, kv => kv.Value.ToString(), StringComparer.Ordinal);
-            await EnvFile.WriteTagsAsync(envFilePath, asStrings);
             return chosen;
         }
         finally

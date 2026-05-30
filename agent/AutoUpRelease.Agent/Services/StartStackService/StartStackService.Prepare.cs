@@ -22,7 +22,11 @@ public sealed partial class StartStackService
             context.StackStateFile,
             context.StackName,
             context.Version);
-
+        await StackStateStore.SetDomainAsync(
+            context.StackStateFile,
+            context.StackName,
+            context.Domain
+        );
         await DockerCompose.PrepareStackResources(
             context.StackName,
             context.Version,
@@ -39,18 +43,44 @@ public sealed partial class StartStackService
         var keys = ResolvePortKeys(context.StackEnvFile);
         if (keys.Count == 0)
             return "В .env не найдено ни одной переменной вида *_PORT или *_PORT_<N>";
+        
+        if (ShouldUseDefaultPorts(context.Domain))
+        {
+            var defaultPorts = new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["RABBITMQ_PORT_1"] = 15672,
+                ["RABBITMQ_PORT_2"] = 5672,
+                ["POSTGRES_PORT"] = 5632,
+                ["MASTER_POSTGRES_PORT"] = 5532,
+                ["FILE_STORAGE_PORT"] = 52959,
+                ["SPEECH_PORT"] = 52303,
+                ["SERVER_PORT"] = 53800,
+                ["ADMIN_PORT"] = 65401,
+                ["CALL_PORT"] = 53620,
+                ["PORTAL_PORT"] = 53801,
+                ["TELEMETRY_COLLECTOR_PORT_1"] = 4317,
+                ["TELEMETRY_COLLECTOR_PORT_2"] = 4318,
+            };
 
-        var allocatedPorts = await PortAllocator.AllocateAndWriteEnvAsync(
-            context.DeployProjectsDir,
-            context.StateFileName,
-            context.StackName,
-            context.StackEnvFile,
-            keys,
-            scanMin: 1024,
-            scanMax: 65535,
-            ct);
+            await StackStateStore.SetAllocatedPortsAsync(
+                context.StackStateFile,
+                context.StackName,
+                defaultPorts);
+        }
+        else
+        {
+            var allocatedPorts = await PortAllocator.AllocateAsync(
+                context.DeployProjectsDir,
+                context.StateFileName,
+                context.StackName,
+                keys,
+                scanMin: 1024,
+                scanMax: 65535,
+                ct);
 
-        await StackStateStore.SetAllocatedPortsAsync(context.StackStateFile, context.StackName, allocatedPorts);
+            await StackStateStore.SetAllocatedPortsAsync(context.StackStateFile, context.StackName, allocatedPorts);
+        }
+
         return null;
     }
 

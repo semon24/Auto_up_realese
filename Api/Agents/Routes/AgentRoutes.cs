@@ -3,6 +3,7 @@ using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
 using AutoUpRelease.Api.Ssl;
 using Microsoft.AspNetCore.SignalR;
+using System.Net;
 
 namespace AutoUpRelease.Api.Agents;
 
@@ -64,11 +65,20 @@ public static class AgentRoutes
             if (string.IsNullOrEmpty(version))
                 return Results.Json(new { error = "Нужен version" }, statusCode: 400);
 
+            var domain = body?.Domain?.Trim();
+            if (string.IsNullOrWhiteSpace(domain) &&
+                agentsJson.TryGet(hostName, out var agentInfo))
+            {
+                domain = NormalizeDomainOrIp(agentInfo?.IpAddress);
+            }
+            if (string.IsNullOrWhiteSpace(domain))
+                return Results.Json(new { error = "Не удалось определить domain" }, statusCode: 400);
 
             var (ok, error, payload) = await sessions.StartDockerComposeUpWithAgentAsync(
                 hostName,
                 stackName,
                 version,
+                domain,
                 TimeSpan.FromMinutes(15),
                 ct);
 
@@ -243,5 +253,20 @@ public static class AgentRoutes
         return Results.Json(
             new { error = $"Агент '{hostName.Trim()}' подключён в режиме readonly. Управляющие действия запрещены." },
             statusCode: 403);
+    }
+
+    static string? NormalizeDomainOrIp(string? value)
+    {
+        var normalized = value?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+            return null;
+
+        if (!IPAddress.TryParse(normalized, out var ip))
+            return normalized;
+
+        if (ip.IsIPv4MappedToIPv6)
+            return ip.MapToIPv4().ToString();
+
+        return ip.ToString();
     }
 }

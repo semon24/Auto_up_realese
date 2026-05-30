@@ -12,7 +12,10 @@ public static class StackCleanupService
     const string DockerCli = "docker";
     const string DockerComposeCli = DockerCli;
 
-    public static async Task CleanupStackAsync(string stackDir, string? stackName = null)
+    public static async Task CleanupStackAsync(
+        string stackDir,
+        string? stackName = null,
+        string? stackStateFile = null)
     {
         if (!Directory.Exists(stackDir))
         {
@@ -24,9 +27,13 @@ public static class StackCleanupService
 
         // Всегда пытаемся снять проект compose, даже если up оборвался на полпути или нет "running".
         // -v: именованные volumes из compose; --remove-orphans: висящие контейнеры.
-        await TryComposeDownAsync(stackDir);
-        await RemoveComposeResourcesAsync(stackDir);
-        await RemoveExternalResourcesAsync(stackDir);
+        IReadOnlyDictionary<string, string>? composeEnv = null;
+        if (!string.IsNullOrWhiteSpace(stackStateFile) && !string.IsNullOrWhiteSpace(stackName) && File.Exists(stackStateFile))
+            composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(stackStateFile, stackName);
+
+        await TryComposeDownAsync(stackDir, stackName, composeEnv);
+        await RemoveComposeResourcesAsync(stackDir, stackName, composeEnv);
+        await RemoveExternalResourcesAsync(stackDir, stackName, composeEnv);
         await RemoveExpectedExternalResourcesAsync(stackName);
 
         Console.WriteLine($"[cleanup] удаление рабочей папки стека: {stackDir}");
@@ -34,14 +41,14 @@ public static class StackCleanupService
         Console.WriteLine($"[cleanup] очистка стека завершена: {stackDir}");
     }
 
-    static async Task TryComposeDownAsync(string stackDir)
+    static async Task TryComposeDownAsync(string stackDir, string? stackName, IReadOnlyDictionary<string, string>? composeEnv)
     {
         Console.WriteLine(
             $"[cleanup] docker compose down -v --remove-orphans (тома проекта compose удаляются ключом -v)");
 
         try
         {
-            await DockerCompose.RunAsync(stackDir, null, "down", "-v", "--remove-orphans");
+            await DockerCompose.RunAsync(stackDir, null, composeEnv ?? DockerCompose.GetComposeEnv(stackName), "down", "-v", "--remove-orphans");
             Console.WriteLine("[cleanup] docker compose down выполнен успешно");
         }
         catch (Exception cleanupEx)
@@ -50,12 +57,16 @@ public static class StackCleanupService
         }
     }
 
-    static async Task RemoveComposeResourcesAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
+    static async Task RemoveComposeResourcesAsync(
+        string composeDir,
+        string? stackName,
+        IReadOnlyDictionary<string, string>? composeEnv,
+        IReadOnlyList<string>? composeFiles = null)
     {
         try
         {
-            var volumes = await GetComposeResourcesByKindAsync(composeDir, "volumes", composeFiles);
-            var networks = await GetComposeResourcesByKindAsync(composeDir, "networks", composeFiles);
+            var volumes = await GetComposeResourcesByKindAsync(composeDir, "volumes", stackName, composeEnv, composeFiles);
+            var networks = await GetComposeResourcesByKindAsync(composeDir, "networks", stackName, composeEnv, composeFiles);
 
             Console.WriteLine(
                 $"[cleanup] ресурсы из docker compose config: volumes={volumes.Count}, networks={networks.Count}");
@@ -75,10 +86,12 @@ public static class StackCleanupService
     static async Task<HashSet<string>> GetComposeResourcesByKindAsync(
         string composeDir,
         string kind,
+        string? stackName,
+        IReadOnlyDictionary<string, string>? composeEnv,
         IReadOnlyList<string>? composeFiles)
     {
         var resources = new HashSet<string>(StringComparer.Ordinal);
-        var env = DockerCompose.GetComposeEnv(composeDir);
+        var env = composeEnv ?? DockerCompose.GetComposeEnv(stackName);
 
         var args = new List<string> { "compose" };
         if (composeFiles != null)
@@ -111,11 +124,15 @@ public static class StackCleanupService
         return resources;
     }
 
-    static async Task RemoveExternalResourcesAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
+    static async Task RemoveExternalResourcesAsync(
+        string composeDir,
+        string? stackName,
+        IReadOnlyDictionary<string, string>? composeEnv,
+        IReadOnlyList<string>? composeFiles = null)
     {
         try
         {
-            var resources = await GetExternalResourceNamesAsync(composeDir, composeFiles);
+            var resources = await GetExternalResourceNamesAsync(composeDir, stackName, composeEnv, composeFiles);
 
             var volList = resources.Volumes.OrderBy(v => v, StringComparer.Ordinal).ToList();
             var netList = resources.Networks.OrderBy(n => n, StringComparer.Ordinal).ToList();
@@ -164,11 +181,13 @@ public static class StackCleanupService
 
     static async Task<(HashSet<string> Volumes, HashSet<string> Networks)> GetExternalResourceNamesAsync(
         string composeDir,
+        string? stackName,
+        IReadOnlyDictionary<string, string>? composeEnv,
         IReadOnlyList<string>? composeFiles)
     {
         var volumes = new HashSet<string>(StringComparer.Ordinal);
         var networks = new HashSet<string>(StringComparer.Ordinal);
-        var env = DockerCompose.GetComposeEnv(composeDir);
+        var env = composeEnv ?? DockerCompose.GetComposeEnv(stackName);
 
         var args = new List<string> { "compose" };
         if (composeFiles != null)

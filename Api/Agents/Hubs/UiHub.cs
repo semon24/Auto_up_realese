@@ -124,7 +124,8 @@ public sealed class UiHub(
                 kv => kv.Key,
                 kv => new RuntimeServiceDto(kv.Value.State, kv.Value.Health),
                 StringComparer.Ordinal),
-            certificates);
+            certificates,
+            snapshot.Domain);
     }
 
     /// <summary>Рассылка <see cref="EventAgentUpdated"/> всем вкладкам UI из любого места приложения.</summary>
@@ -162,6 +163,7 @@ public sealed record RuntimeStackDto(
     IReadOnlyDictionary<string, string>? ServiceLinks,
     IReadOnlyList<string>? ServiceDomains,
     IReadOnlyDictionary<string, RuntimeServiceDto> Services,
-    IReadOnlyList<SslCertificateInfo>? Certificates);
+    IReadOnlyList<SslCertificateInfo>? Certificates,
+    string? Domain);
 
 public sealed record RuntimeServiceDto(string State, string? Health);

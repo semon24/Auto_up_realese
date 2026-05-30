@@ -30,10 +30,11 @@ public sealed class StopStackService
         try
         {
             Console.WriteLine($"[stop-stack] этап=begin tag={tag} dir={stackDir}");
+            var composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(stackStateFile, tag);
 
             await SetOperationAsync(stackStateFile, tag, "stopping");
             Console.WriteLine("[stop-stack] этап=stop");
-            await DockerCompose.RunStopAsync(stackDir);
+            await DockerCompose.RunStopAsync(stackDir, stackName: tag, env: composeEnv);
 
             Console.WriteLine("[stop-stack] этап=wait_stopped timeout_sec=600 poll_sec=2");
             var stopWaitResult = await DockerCompose.WaitForServicesStoppedAsync(
@@ -41,7 +42,9 @@ public sealed class StopStackService
                 timeout: TimeSpan.FromSeconds(600),
                 pollInterval: TimeSpan.FromSeconds(2),
                 ct,
-                onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "stopping", servicesState));
+                onProgress: servicesState => SaveProgressStateAsync(stackStateFile, tag, "stopping", servicesState),
+                stackName: tag,
+                env: composeEnv);
             if (!stopWaitResult.IsStopped)
             {
                 Console.WriteLine($"[stop-stack] этап=wait_stopped status=failed reason={stopWaitResult.Reason ?? "<unknown>"}");

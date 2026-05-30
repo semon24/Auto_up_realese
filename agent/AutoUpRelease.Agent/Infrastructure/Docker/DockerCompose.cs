@@ -27,18 +27,32 @@ public static partial class DockerCompose
             stdin: password + Environment.NewLine);
     }
 
-    public static async Task RunAsync(string composeDir, IReadOnlyList<string>? composeFiles = null, params string[] args)
+    public static async Task RunAsync(
+        string composeDir,
+        IReadOnlyList<string>? composeFiles = null,
+        IReadOnlyDictionary<string, string>? env = null,
+        params string[] args)
     {
         var all = BuildComposeArgs(composeFiles, args);
-        await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray(), env: GetComposeEnv(composeDir));
+        await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray(), env: env);
     }
 
-    public static async Task<bool> IsRunningAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
+    public static async Task RunAsync(string composeDir, string? stackName, IReadOnlyList<string>? composeFiles = null, params string[] args)
+    {
+        var all = BuildComposeArgs(composeFiles, args);
+        await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray(), env: GetComposeEnv(stackName));
+    }
+
+    public static async Task<bool> IsRunningAsync(
+        string composeDir,
+        IReadOnlyList<string>? composeFiles = null,
+        string? stackName = null,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         try
         {
             var allServicesArgs = BuildComposeArgs(composeFiles, "config", "--services");
-            var env = GetComposeEnv(composeDir);
+            env ??= GetComposeEnv(stackName);
             var (allServicesOut, _, allExit) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, allServicesArgs.ToArray(), env);
 
             if (allExit != 0)
@@ -78,7 +92,11 @@ public static partial class DockerCompose
         }
     }
 
-    public static async Task<Dictionary<string, DockerServiceState>> GetServicesStateAsync(string composeDir, IReadOnlyList<string>? composeFiles = null)
+    public static async Task<Dictionary<string, DockerServiceState>> GetServicesStateAsync(
+        string composeDir,
+        IReadOnlyList<string>? composeFiles = null,
+        string? stackName = null,
+        IReadOnlyDictionary<string, string>? env = null)
     {
         var result = new Dictionary<string, DockerServiceState>(StringComparer.Ordinal);
 
@@ -89,7 +107,7 @@ public static partial class DockerCompose
                 composeDir,
                 DockerComposeCli,
                 psArgs.ToArray(),
-                GetComposeEnv(composeDir));
+                env ?? GetComposeEnv(stackName));
 
             if (exit != 0 || string.IsNullOrWhiteSpace(stdout))
                 return result;
@@ -168,13 +186,8 @@ public static partial class DockerCompose
         return null;
     }
 
-    internal static IReadOnlyDictionary<string, string>? GetComposeEnv(string composeDir)
+    internal static IReadOnlyDictionary<string, string>? GetComposeEnv(string? stackName)
     {
-        if (string.IsNullOrWhiteSpace(composeDir))
-            return null;
-
-        var envFilePath = Path.Combine(composeDir, ".env");
-        var stackName = EnvFile.ReadTag(envFilePath, "STACK_NAME");
         if (string.IsNullOrWhiteSpace(stackName))
             return null;
 

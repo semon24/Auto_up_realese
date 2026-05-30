@@ -15,9 +15,10 @@ public sealed partial class StartStackService
     public async Task<StartStackResult> ExecuteAsync(
         string? rawStackName,
         string? rawVersion,
+        string? rawDomain,
         CancellationToken ct = default)
     {
-        var context = BuildContext(rawStackName, rawVersion);
+        var context = BuildContext(rawStackName, rawVersion, rawDomain);
         if (context is null)
             return StartStackResult.Fail("Нужны stackName и version");
 
@@ -63,6 +64,14 @@ public sealed partial class StartStackService
             Console.WriteLine($"[start-stack] этап=exception message={ex.Message}");
             return await FailAndCleanupAsync(context, ex.Message);
         }
+    }
+
+    private static bool ShouldUseDefaultPorts(string? domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain))
+            return false;
+
+        return !System.Net.IPAddress.TryParse(domain, out _);
     }
 }
 

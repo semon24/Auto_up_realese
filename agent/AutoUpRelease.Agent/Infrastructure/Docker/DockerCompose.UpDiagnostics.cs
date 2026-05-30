@@ -14,9 +14,10 @@ public static partial class DockerCompose
         IReadOnlyList<string>? composeFiles = null,
         int failedServiceLogsTail = 120,
         Func<Dictionary<string, DockerServiceState>, Task>? onProgress = null,
-        TimeSpan? progressPollInterval = null)
+        TimeSpan? progressPollInterval = null,
+        string? stackName = null)
     {
-        env ??= GetComposeEnv(composeDir);
+        env ??= GetComposeEnv(stackName);
         var upArgs = BuildComposeArgs(composeFiles, "up", "-d");
         using var progressCts = new CancellationTokenSource();
         Task? progressTask = null;
@@ -28,7 +29,9 @@ public static partial class DockerCompose
                 progressPollInterval ?? TimeSpan.FromSeconds(2),
                 onProgress,
                 composeFiles,
-                progressCts.Token);
+                progressCts.Token,
+                stackName,
+                env);
         }
 
         var (stdout, stderr, exitCode) = await RunProcessCaptureAsync(
@@ -51,7 +54,7 @@ public static partial class DockerCompose
         if (string.IsNullOrWhiteSpace(failedService))
             throw new InvalidOperationException(composeError);
 
-        var serviceLogs = await TryGetServiceLogsAsync(composeDir, failedService, composeFiles, failedServiceLogsTail);
+        var serviceLogs = await TryGetServiceLogsAsync(composeDir, failedService, composeFiles, failedServiceLogsTail, stackName);
         if (string.IsNullOrWhiteSpace(serviceLogs))
             throw new InvalidOperationException(composeError);
 
@@ -87,9 +90,10 @@ public static partial class DockerCompose
         string composeDir,
         string serviceName,
         IReadOnlyList<string>? composeFiles,
-        int tailLines)
+        int tailLines,
+        string? stackName)
     {
-        var env = GetComposeEnv(composeDir);
+        var env = GetComposeEnv(stackName);
         var logsArgs = BuildComposeArgs(
             composeFiles,
             "logs",

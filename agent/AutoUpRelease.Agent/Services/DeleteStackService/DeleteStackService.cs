@@ -39,7 +39,7 @@ public sealed class DeleteStackService
             await RebuildAgentsStateAsync();
 
             Console.WriteLine("[delete-stack] этап=cleanup");
-            await StackCleanupService.CleanupStackAsync(stackDir, tag);
+            await StackCleanupService.CleanupStackAsync(stackDir, tag, stackStateFile);
 
             Console.WriteLine("[delete-stack] этап=rebuild_state");
             await RebuildAgentsStateAsync();

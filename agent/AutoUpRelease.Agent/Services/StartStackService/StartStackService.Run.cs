@@ -9,19 +9,19 @@ public sealed partial class StartStackService
     {
         Console.WriteLine($"[start-stack] этап=write_tag file={context.StackEnvFile}");
         await EnvFile.WriteTagAsync(context.StackEnvFile, _options.ImageEnvKey, context.Version);
-
+        await EnvFile.WriteTagAsync(context.StackEnvFile, "DOMAIN", context.Domain!);
         Console.WriteLine($"[start-stack] этап=docker_compose_up dir={context.StackDir}");
 
-        var composeEnv = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["STACK_NAME"] = context.StackName
-        };
+        var composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(
+            context.StackStateFile,
+            context.StackName);
 
         await DockerCompose.RunUpDetachedWithDiagnosticsAsync(
             context.StackDir,
             composeEnv,
             onProgress: servicesState => SaveProgressStateAsync(context, servicesState),
-            progressPollInterval: TimeSpan.FromSeconds(2));
+            progressPollInterval: TimeSpan.FromSeconds(2),
+            stackName: context.StackName);
 
         Console.WriteLine("[start-stack] этап=wait_services_ready timeout_sec=600 poll_sec=2");
         var waitResult = await DockerCompose.WaitForServicesReadyAsync(
@@ -29,7 +29,9 @@ public sealed partial class StartStackService
             timeout: TimeSpan.FromSeconds(600),
             pollInterval: TimeSpan.FromSeconds(2),
             ct,
-            onProgress: servicesState => SaveProgressStateAsync(context, servicesState));
+            onProgress: servicesState => SaveProgressStateAsync(context, servicesState),
+            stackName: context.StackName,
+            env: composeEnv);
 
         Console.WriteLine(
             $"[start-stack] этап=wait_services_ready finished isReady={waitResult.IsReady} hasFailure={waitResult.HasFailure} reason={waitResult.Reason ?? "<null>"}");
