@@ -1,5 +1,4 @@
 using AutoUpRelease.Agent;
-using System.Text.RegularExpressions;
 
 namespace AutoUpRelease.Agent.Services.StartStackService;
 
@@ -40,9 +39,9 @@ public sealed partial class StartStackService
         StartStackContext context,
         CancellationToken ct)
     {
-        var keys = ResolvePortKeys(context.StackEnvFile);
+        var keys = ResolvePortKeys(_options.PortAllocation);
         if (keys.Count == 0)
-            return "В .env не найдено ни одной переменной вида *_PORT или *_PORT_<N>";
+            return "Не найдено ни одного ключа для аллокации портов: настрой PortAllocation:Keys";
         
         if (ShouldUseDefaultPorts(context.Domain))
         {
@@ -74,8 +73,8 @@ public sealed partial class StartStackService
                 context.StateFileName,
                 context.StackName,
                 keys,
-                scanMin: 1024,
-                scanMax: 65535,
+                scanMin: _options.PortAllocation.ScanMin,
+                scanMax: _options.PortAllocation.ScanMax,
                 ct);
 
             await StackStateStore.SetAllocatedPortsAsync(context.StackStateFile, context.StackName, allocatedPorts);
@@ -84,25 +83,20 @@ public sealed partial class StartStackService
         return null;
     }
 
-    private static List<string> ResolvePortKeys(string stackEnvFile)
+    private static List<string> ResolvePortKeys(PortAllocationOptions? options)
     {
-        if (!File.Exists(stackEnvFile))
-            return new List<string>();
+        var keys = options?.Keys?
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Select(key => key.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList()
+            ?? new List<string>();
+        if (keys.Count > 0)
+            return keys;
 
-        var envText = File.ReadAllText(stackEnvFile);
-        var matches = Regex.Matches(
-            envText,
-            @"^\s*(?<key>[A-Za-z_][A-Za-z0-9_]*_PORT(?:_[0-9]+)?)\s*=.*$",
-            RegexOptions.Multiline);
-
-        var keys = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Match match in matches)
-        {
-            var key = match.Groups["key"].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(key))
-                keys.Add(key);
-        }
-
-        return keys.ToList();
+        return (options?.KeysCsv ?? string.Empty)
+            .Split([',', ';', '\r', '\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 }

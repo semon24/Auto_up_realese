@@ -10,14 +10,6 @@ public record StartBody(
 public record AgentPasswordBody(
     [property: JsonPropertyName("password")] string? Password);
 
-public sealed record AddDomainsBody(
-    [property: JsonPropertyName("stackName")] string? StackName,
-    [property: JsonPropertyName("domains")] List<string>? Domains);
-
-public sealed record DeleteDomainBody(
-    [property: JsonPropertyName("stackName")] string? StackName,
-    [property: JsonPropertyName("domain")] string? Domain);
-
 public record TagItem(string Tag);
 
 public sealed record SslCertificateInfo(

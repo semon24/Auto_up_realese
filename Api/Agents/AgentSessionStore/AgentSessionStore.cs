@@ -81,8 +81,6 @@ public sealed partial class AgentSessionStore
             down.Tcs.TrySetCanceled();
         if (_dockerComposeRestartWaiters.TryRemove(normalizedHostName, out var restart))
             restart.Tcs.TrySetCanceled();
-        if (_deleteDomainWaiters.TryRemove(normalizedHostName, out var deleteDomain))
-            deleteDomain.Tcs.TrySetCanceled();
     }
 
     static string? Normalize(string? hostName)

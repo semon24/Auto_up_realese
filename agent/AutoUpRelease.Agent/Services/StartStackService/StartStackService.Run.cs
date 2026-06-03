@@ -8,8 +8,8 @@ public sealed partial class StartStackService
         RunAndWaitReadyAsync(StartStackContext context, CancellationToken ct)
     {
         Console.WriteLine($"[start-stack] этап=write_tag file={context.StackEnvFile}");
-        await EnvFile.WriteTagAsync(context.StackEnvFile, _options.ImageEnvKey, context.Version);
-        await EnvFile.WriteTagAsync(context.StackEnvFile, "DOMAIN", context.Domain!);
+        var tags = await BuildDnsTagsAsync(context);
+        await EnvFile.WriteTagsAsync(context.StackEnvFile, tags);
         Console.WriteLine($"[start-stack] этап=docker_compose_up dir={context.StackDir}");
 
         var composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(
@@ -53,6 +53,47 @@ public sealed partial class StartStackService
             operationType: "start",
             operationStatus: "in_progress");
     }
+
+    private async Task<Dictionary<string, string>> BuildDnsTagsAsync(StartStackContext context)
+    {
+        var adminService = EnvFile.ReadTag(context.StackEnvFile, "ADMIN_SERVICE");
+        var serverService = EnvFile.ReadTag(context.StackEnvFile, "SERVER_SERVICE");
+        var portalService = EnvFile.ReadTag(context.StackEnvFile, "PORTAL_SERVICE");
+        var callService = EnvFile.ReadTag(context.StackEnvFile, "CALL_SERVICE");
+        var domain = context.Domain?.Trim();
+        var ports = await StackStateStore.GetAllocatedPortsAsync(
+                        context.StackStateFile,
+                        context.StackName);
+        var isIp = !string.IsNullOrWhiteSpace(domain) && System.Net.IPAddress.TryParse(domain, out _);
+        var DNS_NAME_BACKOFFICE = "";
+        var DNS_NAME_SERVER = "";
+        var DNS_NAME_CALL ="";
+        var DNS_NAME_RDV = "";
+        if (!isIp)
+        {
+            DNS_NAME_BACKOFFICE=$"https://{adminService}.{domain}";
+            DNS_NAME_SERVER=$"https://{serverService}.{domain}";
+            DNS_NAME_CALL=$"https://{callService}.{domain}";
+            DNS_NAME_RDV=$"https://{portalService}.{domain}";
+        }
+        else
+        {
+            DNS_NAME_BACKOFFICE=$"http://{domain}:{ports["ADMIN_PORT"]}";
+            DNS_NAME_SERVER=$"http://{domain}:{ports["SERVER_PORT"]}";
+            DNS_NAME_RDV=$"http://{domain}:{ports["PORTAL_PORT"]}";
+            DNS_NAME_CALL=$"http://{domain}:{ports["CALL_PORT"]}";
+        }
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [_options.ImageEnvKey] = context.Version,
+            ["DOMAIN"] = context.Domain!,
+            ["DNS_NAME_BACKOFFICE"] = DNS_NAME_BACKOFFICE,
+            ["DNS_NAME_SERVER"] = DNS_NAME_SERVER,
+            ["DNS_NAME_RDV"] = DNS_NAME_RDV,
+            ["DNS_NAME_CALL"] = DNS_NAME_CALL
+        };
+    }
+
 
     private static string BuildStartFailedMessage(
         (bool IsReady, bool HasFailure, string? Reason, Dictionary<string, DockerServiceState> ServicesState) waitResult)

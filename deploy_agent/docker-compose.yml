@@ -21,8 +21,7 @@ services:
       ServiceLinkEnvKeys__Server: ${ServiceLinkEnvKeys__Server}
       ServiceLinkEnvKeys__Portal: ${ServiceLinkEnvKeys__Portal}
       ServiceLinkEnvKeys__Call: ${ServiceLinkEnvKeys__Call}
-      PortAllocation__Keys__0: ${PortAllocation__Keys__0}
-      PortAllocation__Keys__1: ${PortAllocation__Keys__1}
+      PortAllocation__KeysCsv: ${PORT_ALLOCATION_KEYS}
       PortAllocation__ScanMin: ${PortAllocation__ScanMin}
       PortAllocation__ScanMax: ${PortAllocation__ScanMax}
     extra_hosts:

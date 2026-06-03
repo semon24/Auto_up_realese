@@ -92,8 +92,6 @@ public sealed class AgentWorker : BackgroundService
         DockerComposeRestartSignalRMessages.Register(connection, _restartStackService);
         DockerComposeStopSignalRMessages.Register(connection, _stopStackService);
         UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
-        AddDomainsSignalrMessages.Register(connection, _appOptions);
-        DeleteDomainsSignalrMessages.Register(connection, _appOptions);
         try
         {
             await connection.StartAsync(stoppingToken);

@@ -96,18 +96,6 @@ public sealed class AgentHub(
         return Task.CompletedTask;
     }
 
-    public Task AddDomainsCompleted(string id, bool ok, string? error, object? payload)
-    {
-        sessions.HandleAddDomainsCompleted(Context.ConnectionId, id, ok, error, payload);
-        return Task.CompletedTask;
-    }
-
-    public Task DeleteDomainsCompleted(string id, bool ok, string? error, object? payload)
-    {
-        sessions.HandleDeleteDomainsCompleted(Context.ConnectionId, id, ok, error, payload);
-        return Task.CompletedTask;
-    }
-
     /// <remarks>
     /// Массив тегов через <see cref="JsonElement"/> — входящее тело могло прилететь как массив с полем <c>tag</c> без строгой привязки к типам клиента агента.
     /// </remarks>
