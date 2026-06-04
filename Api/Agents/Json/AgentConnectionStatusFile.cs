@@ -31,7 +31,7 @@ public sealed class AgentConnectionStatusFile
     /// Агент открыл WebSocket: новый хост или после «waiting for password» → «waiting for password»;
     /// после «password accepted» / «disconnected» → сразу «password accepted» (повторный ввод пароля не нужен).
     /// </summary>
-    public void UpdateStatusOnConnect(string hostName, string? ipAddress, string? agentType)
+    public void UpdateStatusOnConnect(string hostName, string? ipAddress, string? agentType, string? agentMode)
     {
         if (_path is null) return;
 
@@ -39,6 +39,7 @@ public sealed class AgentConnectionStatusFile
         {
             var map = ReadMap(_path);
             var normalizedType = NormalizeAgentType(agentType);
+            var normalizedMode = NormalizeAgentMode(agentMode);
 
             if (map.TryGetValue(hostName, out var st))
             {
@@ -50,6 +51,7 @@ public sealed class AgentConnectionStatusFile
 
                 st.IpAddress = ipAddress;
                 st.Type = normalizedType;
+                st.Mode = normalizedMode;
                 st.DisconnectedAtUtc = null;
             }
             else
@@ -58,6 +60,7 @@ public sealed class AgentConnectionStatusFile
                 {
                     Status = StatusWaitingForPassword,
                     Type = normalizedType,
+                    Mode = normalizedMode,
                     IpAddress = ipAddress,
                     DisconnectedAtUtc = null
                 };
@@ -204,6 +207,7 @@ public sealed class AgentConnectionStatusFile
             {
                 Status = entry.Status,
                 Type = entry.Type,
+                Mode = entry.Mode,
                 IpAddress = entry.IpAddress,
                 DisconnectedAtUtc = entry.DisconnectedAtUtc,
             };
@@ -241,5 +245,11 @@ public sealed class AgentConnectionStatusFile
     {
         var normalized = agentType?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? "default" : normalized.ToLowerInvariant();
+    }
+
+    static string? NormalizeAgentMode(string? agentMode)
+    {
+        var normalized = agentMode?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized.ToLowerInvariant();
     }
 }

@@ -13,11 +13,11 @@ internal static class AgentSignalRConnection
     /// <summary>
     /// Читает <c>SERVER_BACKEND_URL</c> и создаёт подключение к <c>/hubs/agent</c> c query-параметром hostName.
     /// </summary>
-    internal static HubConnection Create(string hostName, string? agentType = null)
+    internal static HubConnection Create(string hostName, string? agentType = null, string? agentMode = null)
     {
         var raw = Environment.GetEnvironmentVariable("SERVER_BACKEND_URL") ?? "";
         var baseUri = new Uri(raw.Trim().TrimEnd('/'));
-        var hubUri = BuildHubUri(baseUri, hostName, agentType);
+        var hubUri = BuildHubUri(baseUri, hostName, agentType, agentMode);
 
         var hubBuilder = new HubConnectionBuilder()
             .WithUrl(hubUri, options =>
@@ -43,7 +43,7 @@ internal static class AgentSignalRConnection
         return connection;
     }
 
-    internal static Uri BuildHubUri(Uri apiBase, string host, string? agentType = null)
+    internal static Uri BuildHubUri(Uri apiBase, string host, string? agentType = null, string? agentMode = null)
     {
         var queryParts = new List<string>
         {
@@ -52,6 +52,9 @@ internal static class AgentSignalRConnection
         var normalizedType = agentType?.Trim();
         if (!string.IsNullOrWhiteSpace(normalizedType))
             queryParts.Add($"type={Uri.EscapeDataString(normalizedType)}");
+        var normalizedMode = agentMode?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedMode))
+            queryParts.Add($"mode={Uri.EscapeDataString(normalizedMode)}");
 
         var ub = new UriBuilder(apiBase)
         {

@@ -16,6 +16,7 @@ export interface ServiceLinks {
 export interface AgentConnectionInfo {
   status: string;
   type?: string | null;
+  mode?: string | null;
   ipAddress?: string | null;
   disconnectedAtUtc?: string | null;
 }
@@ -30,6 +31,7 @@ export interface AgentUpdatedEvent {
   hostName?: string;
   status?: string | null;
   type?: string | null;
+  mode?: string | null;
   ipAddress?: string | null;
   disconnectedAtUtc?: string | null;
 }

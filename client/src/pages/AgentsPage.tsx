@@ -69,15 +69,15 @@ export function AgentsPage() {
               ? new Date(agentInfo.disconnectedAtUtc).toLocaleString("ru-RU")
               : null;
             const readonlyAgent = isReadonlyAgent(agentInfo.type);
-            const versionTags = Array.from(
+            const versions = Array.from(
               new Set(
                 (status.stacksByHost[hostName] ?? [])
-                  .map((stack) => stack.tag?.trim())
-                  .filter((tag): tag is string => Boolean(tag))
+                  .map((stack) => stack.version?.trim())
+                  .filter((version): version is string => Boolean(version))
               )
             ).sort(compareVersionTags);
-            const newestVersion = versionTags[0] ?? null;
-            const otherVersions = versionTags.slice(1);
+            const newestVersion = versions[0] ?? null;
+            const otherVersions = versions.slice(1);
             const versionLine = newestVersion
               ? otherVersions.length > 0
                 ? `${newestVersion} (${otherVersions.join(", ")})`

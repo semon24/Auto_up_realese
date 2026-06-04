@@ -148,6 +148,7 @@ export function useRuntimePolling() {
             : {
                 status: payload.status ?? "",
                 type: payload.type ?? null,
+                mode: payload.mode ?? null,
                 ipAddress: payload.ipAddress ?? null,
                 disconnectedAtUtc: payload.disconnectedAtUtc ?? null,
               },

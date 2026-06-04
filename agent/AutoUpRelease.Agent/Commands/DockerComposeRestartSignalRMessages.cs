@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
+using AutoUpRelease.Agent.Services.SingleProjectControlService;
 using AutoUpRelease.Agent.Services.RestartStackService;
 
 namespace AutoUpRelease.Agent.Commands;
@@ -8,7 +10,11 @@ internal static class DockerComposeRestartSignalRMessages
     const string ClientMethodDockerComposeRestart = "docker_compose_restart";
     const string ServerMethodDockerComposeRestartCompleted = "DockerComposeRestartCompleted";
 
-    internal static void Register(HubConnection connection, RestartStackService restartStackService)
+    internal static void Register(
+        HubConnection connection,
+        RestartStackService restartStackService,
+        SingleProjectControlService singleProjectControlService,
+        IOptions<AppOptions> appOptions)
     {
         connection.On<DockerComposeRestartRequest>(
             ClientMethodDockerComposeRestart,
@@ -20,7 +26,12 @@ internal static class DockerComposeRestartSignalRMessages
                 Console.WriteLine(
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_restart: id={request.Id}, tag={request.Tag?.Trim() ?? "<null>"}");
 
-                _ = RunDockerComposeRestartAsync(connection, restartStackService, request);
+                _ = RunDockerComposeRestartAsync(
+                    connection,
+                    restartStackService,
+                    singleProjectControlService,
+                    appOptions.Value,
+                    request);
                 return Task.CompletedTask;
             });
     }
@@ -28,23 +39,27 @@ internal static class DockerComposeRestartSignalRMessages
     static async Task RunDockerComposeRestartAsync(
         HubConnection connection,
         RestartStackService restartStackService,
+        SingleProjectControlService singleProjectControlService,
+        AppOptions appOptions,
         DockerComposeRestartRequest request)
     {
         try
         {
-            var result = await restartStackService.ExecuteAsync(
-                request.Tag,
-                CancellationToken.None);
+            var (ok, error, payload) = appOptions.IsSingleProjectMode
+                ? await ToTupleAsync(singleProjectControlService.RestartAsync(CancellationToken.None))
+                : await ToTupleAsync(restartStackService.ExecuteAsync(
+                    request.Tag,
+                    CancellationToken.None));
 
             Console.WriteLine(
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_restart завершен: id={request.Id}, ok={result.Ok}, error={result.Error ?? "<null>"}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_restart завершен: id={request.Id}, ok={ok}, error={error ?? "<null>"}");
 
             await connection.InvokeAsync(
                 ServerMethodDockerComposeRestartCompleted,
                 request.Id,
-                result.Ok,
-                result.Error,
-                (object?)null);
+                ok,
+                error,
+                payload);
         }
         catch (Exception ex)
         {
@@ -72,5 +87,17 @@ internal static class DockerComposeRestartSignalRMessages
     {
         public string? Id { get; set; }
         public string? Tag { get; set; }
+    }
+
+    static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<RestartStackResult> task)
+    {
+        var result = await task;
+        return (result.Ok, result.Error, result.Payload);
+    }
+
+    static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<SingleProjectControlResult> task)
+    {
+        var result = await task;
+        return (result.Ok, result.Error, result.Payload);
     }
 }

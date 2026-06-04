@@ -146,6 +146,7 @@ public sealed class UiHub(
                 hostName = normalizedHostName,
                 status = info?.Status,
                 type = info?.Type,
+                mode = info?.Mode,
                 ipAddress = info?.IpAddress,
                 disconnectedAtUtc = info?.DisconnectedAtUtc
             },

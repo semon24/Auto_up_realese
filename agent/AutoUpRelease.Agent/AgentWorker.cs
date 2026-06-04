@@ -4,6 +4,8 @@ using Microsoft.Extensions.Options;
 using AutoUpRelease.Agent.Commands;
 using AutoUpRelease.Agent.Services.DeleteStackService;
 using AutoUpRelease.Agent.Services.RestartStackService;
+using AutoUpRelease.Agent.Services.SingleProjectControlService;
+using AutoUpRelease.Agent.Services.SingleProjectStateSyncService;
 using AutoUpRelease.Agent.Services.StartStackService;
 using AutoUpRelease.Agent.Services.StaleStartRecoveryService;
 using AutoUpRelease.Agent.Services.StopStackService;
@@ -20,6 +22,8 @@ public sealed class AgentWorker : BackgroundService
     private readonly RestartStackService _restartStackService;
     private readonly StopStackService _stopStackService;
     private readonly StaleStartRecoveryService _staleStartRecoveryService;
+    private readonly SingleProjectControlService _singleProjectControlService;
+    private readonly SingleProjectStateSyncService _singleProjectStateSyncService;
 
     public AgentWorker(
         IOptions<AppOptions> appOptions,
@@ -27,14 +31,18 @@ public sealed class AgentWorker : BackgroundService
         DeleteStackService deleteStackService,
         RestartStackService restartStackService,
         StopStackService stopStackService,
-        StaleStartRecoveryService staleStartRecoveryService)
+        SingleProjectControlService singleProjectControlService,
+        StaleStartRecoveryService staleStartRecoveryService,
+        SingleProjectStateSyncService singleProjectStateSyncService)
     {
         _appOptions = appOptions.Value;
         _startStackService = startStackService;
         _deleteStackService = deleteStackService;
         _restartStackService = restartStackService;
         _stopStackService = stopStackService;
+        _singleProjectControlService = singleProjectControlService;
         _staleStartRecoveryService = staleStartRecoveryService;
+        _singleProjectStateSyncService = singleProjectStateSyncService;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -57,7 +65,10 @@ public sealed class AgentWorker : BackgroundService
 
     async Task RunSignalRSessionAsync(string hostName, CancellationToken stoppingToken)
     {
-        var connection = AgentSignalRConnection.Create(hostName, _appOptions.Type);
+        var agentMode = _appOptions.IsSingleProjectMode
+            ? "single-project"
+            : _appOptions.Mode;
+        var connection = AgentSignalRConnection.Create(hostName, _appOptions.Type, agentMode);
         var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var aggregationCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         Task? aggregationTask = null;
@@ -87,10 +98,10 @@ public sealed class AgentWorker : BackgroundService
         };
 
         AgentSignalRPasswordMessages.Register(connection, _appOptions);
-        DockerComposeUpSignalRMessages.Register(connection, _startStackService);
+        DockerComposeUpSignalRMessages.Register(connection, _startStackService, _singleProjectControlService, new OptionsWrapper<AppOptions>(_appOptions));
         DockerComposeDownSignalRMessages.Register(connection, _deleteStackService);
-        DockerComposeRestartSignalRMessages.Register(connection, _restartStackService);
-        DockerComposeStopSignalRMessages.Register(connection, _stopStackService);
+        DockerComposeRestartSignalRMessages.Register(connection, _restartStackService, _singleProjectControlService, new OptionsWrapper<AppOptions>(_appOptions));
+        DockerComposeStopSignalRMessages.Register(connection, _stopStackService, _singleProjectControlService, new OptionsWrapper<AppOptions>(_appOptions));
         UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
         try
         {
@@ -138,15 +149,28 @@ public sealed class AgentWorker : BackgroundService
         try
         {
             await _staleStartRecoveryService.RecoverAsync(cancellationToken);
-            var linksUpdated = await RefreshServiceLinksInProjectStatesAsync(cancellationToken);
-            var stacksCount = await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
-                _appOptions.ProjectDeploymentPath.Trim(),
-                _appOptions.StateProjectFileName.Trim(),
-                _appOptions.AgentsJsonFilePath.Trim(),
-                _appOptions.AgentHostName,
-                _appOptions.ServiceLinkEnvKeys);
+            var projectStatesUpdated = await RefreshProjectStatesAsync(cancellationToken);
+
+            var stacksCount = 0;
+            if (_appOptions.IsSingleProjectMode)
+            {
+                stacksCount = await AgentsStateFileBuilder.BuildSingleProjectAgentsStateAsync(
+                    _appOptions.ProjectDeploymentPath.Trim(),
+                    _appOptions.StateProjectFileName.Trim(),
+                    _appOptions.AgentsJsonFilePath.Trim(),
+                    _appOptions.AgentHostName);
+            }
+            else
+            {
+                stacksCount = await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
+                    _appOptions.ProjectDeploymentPath.Trim(),
+                    _appOptions.StateProjectFileName.Trim(),
+                    _appOptions.AgentsJsonFilePath.Trim(),
+                    _appOptions.AgentHostName,
+                    _appOptions.ServiceLinkEnvKeys);
+            }
             Console.WriteLine(
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] агрегированный state-файл обновлен: stacks={stacksCount}, linksUpdated={linksUpdated}, output={_appOptions.AgentsJsonFilePath.Trim()}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] агрегированный state-файл обновлен: stacks={stacksCount}, projectStatesUpdated={projectStatesUpdated}, output={_appOptions.AgentsJsonFilePath.Trim()}");
 
             try
             {
@@ -178,10 +202,14 @@ public sealed class AgentWorker : BackgroundService
         }
     }
 
-    async Task<int> RefreshServiceLinksInProjectStatesAsync(CancellationToken cancellationToken)
+    async Task<int> RefreshProjectStatesAsync(CancellationToken cancellationToken)
     {
         var deployDir = _appOptions.ProjectDeploymentPath.Trim();
         var stateFileName = _appOptions.StateProjectFileName.Trim();
+
+        if (_appOptions.IsSingleProjectMode)
+            return await _singleProjectStateSyncService.SyncAsync(cancellationToken);
+
         if (!Directory.Exists(deployDir))
             return 0;
 

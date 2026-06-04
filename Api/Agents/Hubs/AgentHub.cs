@@ -22,6 +22,7 @@ public sealed class AgentHub(
         var httpContext = Context.GetHttpContext();
         var hostName = Context.GetHttpContext()?.Request.Query["hostName"].FirstOrDefault();
         var agentType = Context.GetHttpContext()?.Request.Query["type"].FirstOrDefault();
+        var agentMode = Context.GetHttpContext()?.Request.Query["mode"].FirstOrDefault();
         var ipAddress = httpContext?.Connection.RemoteIpAddress?.ToString();
         if (string.IsNullOrWhiteSpace(hostName))
         {
@@ -45,6 +46,7 @@ public sealed class AgentHub(
             Context.ConnectionId,
             ipAddress,
             agentType,
+            agentMode,
             Context.ConnectionAborted);
 
         await base.OnConnectedAsync();

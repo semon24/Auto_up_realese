@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
+using AutoUpRelease.Agent.Services.SingleProjectControlService;
 using AutoUpRelease.Agent.Services.StopStackService;
 
 namespace AutoUpRelease.Agent.Commands;
@@ -8,7 +10,11 @@ internal static class DockerComposeStopSignalRMessages
     const string ClientMethodDockerComposeStop = "docker_compose_stop";
     const string ServerMethodDockerComposeStopCompleted = "DockerComposeStopCompleted";
 
-    internal static void Register(HubConnection connection, StopStackService stopStackService)
+    internal static void Register(
+        HubConnection connection,
+        StopStackService stopStackService,
+        SingleProjectControlService singleProjectControlService,
+        IOptions<AppOptions> appOptions)
     {
         connection.On<DockerComposeStopRequest>(
             ClientMethodDockerComposeStop,
@@ -20,7 +26,12 @@ internal static class DockerComposeStopSignalRMessages
                 Console.WriteLine(
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_stop: id={request.Id}, tag={request.Tag?.Trim() ?? "<null>"}");
 
-                _ = RunDockerComposeStopAsync(connection, stopStackService, request);
+                _ = RunDockerComposeStopAsync(
+                    connection,
+                    stopStackService,
+                    singleProjectControlService,
+                    appOptions.Value,
+                    request);
                 return Task.CompletedTask;
             });
     }
@@ -28,23 +39,27 @@ internal static class DockerComposeStopSignalRMessages
     static async Task RunDockerComposeStopAsync(
         HubConnection connection,
         StopStackService stopStackService,
+        SingleProjectControlService singleProjectControlService,
+        AppOptions appOptions,
         DockerComposeStopRequest request)
     {
         try
         {
-            var result = await stopStackService.ExecuteAsync(
-                request.Tag,
-                CancellationToken.None);
+            var (ok, error, payload) = appOptions.IsSingleProjectMode
+                ? await ToTupleAsync(singleProjectControlService.StopAsync(CancellationToken.None))
+                : await ToTupleAsync(stopStackService.ExecuteAsync(
+                    request.Tag,
+                    CancellationToken.None));
 
             Console.WriteLine(
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_stop завершен: id={request.Id}, ok={result.Ok}, error={result.Error ?? "<null>"}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_stop завершен: id={request.Id}, ok={ok}, error={error ?? "<null>"}");
 
             await connection.InvokeAsync(
                 ServerMethodDockerComposeStopCompleted,
                 request.Id,
-                result.Ok,
-                result.Error,
-                (object?)null);
+                ok,
+                error,
+                payload);
         }
         catch (Exception ex)
         {
@@ -72,5 +87,17 @@ internal static class DockerComposeStopSignalRMessages
     {
         public string? Id { get; set; }
         public string? Tag { get; set; }
+    }
+
+    static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<StopStackResult> task)
+    {
+        var result = await task;
+        return (result.Ok, result.Error, result.Payload);
+    }
+
+    static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<SingleProjectControlResult> task)
+    {
+        var result = await task;
+        return (result.Ok, result.Error, result.Payload);
     }
 }

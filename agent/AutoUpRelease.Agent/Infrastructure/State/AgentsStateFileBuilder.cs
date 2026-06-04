@@ -79,6 +79,55 @@ public static class AgentsStateFileBuilder
         }
     }
 
+    public static async Task<int> BuildSingleProjectAgentsStateAsync(
+        string projectDir,
+        string stateFileName,
+        string aggregatedFilePath,
+        string? agentHostName = null)
+    {
+        var outputLock = GetFileLock(aggregatedFilePath);
+        await outputLock.WaitAsync();
+        try
+        {
+            var stacks = new Dictionary<string, AggregatedStackEntry>(StringComparer.Ordinal);
+            var stateFilePath = Path.Combine(projectDir, stateFileName);
+
+            if (File.Exists(stateFilePath))
+            {
+                var stateLock = GetFileLock(stateFilePath);
+                await stateLock.WaitAsync();
+                try
+                {
+                    var state = await ReadStateFileAsync(stateFilePath);
+                    foreach (var kv in state.Stack)
+                        stacks[kv.Key] = ToAggregatedEntry(kv.Value);
+                }
+                finally
+                {
+                    stateLock.Release();
+                }
+            }
+
+            var dir = Path.GetDirectoryName(aggregatedFilePath);
+            if (!string.IsNullOrWhiteSpace(dir))
+                Directory.CreateDirectory(dir);
+
+            var payload = new AggregatedAgentsStateRoot
+            {
+                GeneratedAtUtc = DateTimeOffset.UtcNow,
+                AgentHostName = agentHostName?.Trim() ?? string.Empty,
+                Stacks = stacks
+            };
+
+            await WriteAggregatedFileAsync(aggregatedFilePath, payload);
+            return stacks.Count;
+        }
+        finally
+        {
+            outputLock.Release();
+        }
+    }
+
     static async Task<StateRoot> ReadStateFileAsync(string stateFilePath)
     {
         try

@@ -24,7 +24,7 @@ public sealed partial class AgentSessionStore
         _uiHubContext = uiHubContext;
     }
 
-    public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, string? ipAddress, string? agentType, CancellationToken cancellationToken)
+    public Task RegisterAgentConnectionAsync(string? hostName, string connectionId, string? ipAddress, string? agentType, string? agentMode, CancellationToken cancellationToken)
     {
         if (Normalize(hostName) is not { } normalizedHostName)
             throw new ArgumentException("hostName is required", nameof(hostName));
@@ -37,7 +37,7 @@ public sealed partial class AgentSessionStore
         _connectionsByHost[normalizedHostName] = connectionId;
         _hostsByConnection[connectionId] = normalizedHostName;
         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [api] агент подключился: {normalizedHostName}");
-        _agentsJsonFile.UpdateStatusOnConnect(normalizedHostName, normalizedIpAddress, agentType);
+        _agentsJsonFile.UpdateStatusOnConnect(normalizedHostName, normalizedIpAddress, agentType, agentMode);
         return UiHub.PublishAgentUpdatedAsync(_uiHubContext, _agentsJsonFile, normalizedHostName, cancellationToken);
     }
 

@@ -43,6 +43,11 @@ function isReadonlyAgent(type?: string | null) {
   return type?.trim().toLowerCase() === "readonly";
 }
 
+function isSingleProjectAgent(mode?: string | null) {
+  const normalized = mode?.trim().toLowerCase();
+  return normalized === "single-project" || normalized === "single_project" || normalized === "singleproject";
+}
+
 function buildStackName(projectName: string) {
   const normalized = projectName
     .trim()
@@ -91,6 +96,7 @@ export function AgentDetailPage() {
   const agentInfo = status.agents[hostName];
   const agentStatus = agentInfo?.status;
   const readonlyAgent = isReadonlyAgent(agentInfo?.type);
+  const singleProjectAgent = isSingleProjectAgent(agentInfo?.mode);
   const agentDisconnectedAtText = useMemo(() => {
     const raw = agentInfo?.disconnectedAtUtc?.trim();
     if (!raw) return null;
@@ -190,8 +196,12 @@ export function AgentDetailPage() {
   const shouldShowManagedLinks = isManagedProjectReady && linkEntries.length > 0;
   const isProjectActionPending =
     pausingProject || stoppingProject || restartingProject;
+  const isManagedProjectStarting =
+    effectiveManagedOperationStatus === "starting" ||
+    (isManagedProjectLoading && !isManagedProjectRunning);
   const shouldRenderPauseAction =
-    isManagedProjectRunning || isPendingOperationStatus(effectiveManagedOperationStatus);
+    isManagedProjectRunning ||
+    (isPendingOperationStatus(effectiveManagedOperationStatus) && !isManagedProjectStarting);
   const canRestartManagedProject =
     hasManagedProject &&
     isManagedProjectRunning &&
@@ -638,82 +648,86 @@ export function AgentDetailPage() {
                   ))}
                 </div>
               )}
-              <button
-                type="button"
-                className="agent-detail__add-project"
-                disabled={readonlyAgent}
-                onClick={onToggleLaunchPanel}
-              >
-                {isLaunchPanelOpen ? "Скрыть форму проекта" : "Добавить новый проект"}
-              </button>
-              {isLaunchPanelOpen && (
-                <div className="agent-detail__launch-layout">
-                  <form
-                    className="agent-detail__form agent-detail__form--launch"
-                    onSubmit={(e) => void onLaunch(e)}
+              {!singleProjectAgent && (
+                <>
+                  <button
+                    type="button"
+                    className="agent-detail__add-project"
+                    disabled={readonlyAgent}
+                    onClick={onToggleLaunchPanel}
                   >
-                    <label className="agent-detail__label" htmlFor="agent-launch-project-name">
-                      Имя проекта
-                    </label>
-                    <input
-                      id="agent-launch-project-name"
-                      type="text"
-                      className="agent-detail__input"
-                      value={launchProjectName}
-                      onChange={(e) => setLaunchProjectName(e.target.value)}
-                      placeholder="Например, demo"
-                      autoComplete="off"
-                    />
-                    <label className="agent-detail__label" htmlFor="agent-launch-version">
-                      Версия образа
-                    </label>
-                    <input
-                      id="agent-launch-version"
-                      list="agent-launch-tags"
-                      type="text"
-                      className="agent-detail__input"
-                      value={launchVersion}
-                      onChange={(e) => setLaunchVersion(e.target.value)}
-                      placeholder="Введите или выберите версию"
-                      autoComplete="off"
-                    />
-                    <datalist id="agent-launch-tags">
-                      {tagItemsForHost.map((item) => (
-                        <option key={item.tag} value={item.tag} />
-                      ))}
-                    </datalist>
-                    <label className="agent-detail__label" htmlFor="agent-launch-domain">
-                      Домен или IP
-                    </label>
-                    <input
-                      id="agent-launch-domain"
-                      type="text"
-                      className="agent-detail__input"
-                      value={launchDomain}
-                      onChange={(e) => setLaunchDomain(e.target.value)}
-                      placeholder="Необязательно. Если пусто, будет использован IP агента"
-                      autoComplete="off"
-                    />
-                    {tagsError && (
-                      <p className="agent-detail__error">{tagsError}</p>
-                    )}
-                    <button
-                      type="button"
-                      className="agent-detail__refresh"
-                      disabled={tagsLoading || launching}
-                      onClick={() => void loadTags(hostName)}
-                    >
-                      {tagsLoading ? "…" : "Обновить теги"}
-                    </button>
-                    <button
-                      type="submit"
-                      className="agent-detail__submit"
-                      disabled={launching || readonlyAgent}
-                    >
-                      {launching ? "…" : "Запустить сервис"}
-                    </button>
-                  </form>
-                </div>
+                    {isLaunchPanelOpen ? "Скрыть форму проекта" : "Добавить новый проект"}
+                  </button>
+                  {isLaunchPanelOpen && (
+                    <div className="agent-detail__launch-layout">
+                      <form
+                        className="agent-detail__form agent-detail__form--launch"
+                        onSubmit={(e) => void onLaunch(e)}
+                      >
+                        <label className="agent-detail__label" htmlFor="agent-launch-project-name">
+                          Имя проекта
+                        </label>
+                        <input
+                          id="agent-launch-project-name"
+                          type="text"
+                          className="agent-detail__input"
+                          value={launchProjectName}
+                          onChange={(e) => setLaunchProjectName(e.target.value)}
+                          placeholder="Например, demo"
+                          autoComplete="off"
+                        />
+                        <label className="agent-detail__label" htmlFor="agent-launch-version">
+                          Версия образа
+                        </label>
+                        <input
+                          id="agent-launch-version"
+                          list="agent-launch-tags"
+                          type="text"
+                          className="agent-detail__input"
+                          value={launchVersion}
+                          onChange={(e) => setLaunchVersion(e.target.value)}
+                          placeholder="Введите или выберите версию"
+                          autoComplete="off"
+                        />
+                        <datalist id="agent-launch-tags">
+                          {tagItemsForHost.map((item) => (
+                            <option key={item.tag} value={item.tag} />
+                          ))}
+                        </datalist>
+                        <label className="agent-detail__label" htmlFor="agent-launch-domain">
+                          Домен или IP
+                        </label>
+                        <input
+                          id="agent-launch-domain"
+                          type="text"
+                          className="agent-detail__input"
+                          value={launchDomain}
+                          onChange={(e) => setLaunchDomain(e.target.value)}
+                          placeholder="Необязательно. Если пусто, будет использован IP агента"
+                          autoComplete="off"
+                        />
+                        {tagsError && (
+                          <p className="agent-detail__error">{tagsError}</p>
+                        )}
+                        <button
+                          type="button"
+                          className="agent-detail__refresh"
+                          disabled={tagsLoading || launching}
+                          onClick={() => void loadTags(hostName)}
+                        >
+                          {tagsLoading ? "…" : "Обновить теги"}
+                        </button>
+                        <button
+                          type="submit"
+                          className="agent-detail__submit"
+                          disabled={launching || readonlyAgent}
+                        >
+                          {launching ? "…" : "Запустить сервис"}
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <div className="agent-detail__launch-feedback">
@@ -809,22 +823,22 @@ export function AgentDetailPage() {
                   : onStartManagedProject())
               }
             >
-              {pausingProject
-                ? shouldRenderPauseAction
-                  ? "Останавливаем..."
-                  : "Запускаем..."
+              {pausingProject || isManagedProjectStarting
+                ? "Запускаем..."
                 : shouldRenderPauseAction
                   ? "Остановить сервис"
                   : "Запустить сервис"}
             </button>
-            <button
-              type="button"
-              className="agent-detail__stop-project"
-              disabled={!canDeleteManagedProject}
-              onClick={() => void onStopManagedProject()}
-            >
-              {stoppingProject ? "Удаляем..." : "Удалить сервис"}
-            </button>
+            {!singleProjectAgent && (
+              <button
+                type="button"
+                className="agent-detail__stop-project"
+                disabled={!canDeleteManagedProject}
+                onClick={() => void onStopManagedProject()}
+              >
+                {stoppingProject ? "Удаляем..." : "Удалить сервис"}
+              </button>
+            )}
           </div>
 
           {managedCertificates.length > 0 && (

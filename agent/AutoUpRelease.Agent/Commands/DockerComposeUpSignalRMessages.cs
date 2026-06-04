@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
+using AutoUpRelease.Agent.Services.SingleProjectControlService;
 using AutoUpRelease.Agent.Services.StartStackService;
 
 namespace AutoUpRelease.Agent.Commands;
@@ -8,7 +10,11 @@ internal static class DockerComposeUpSignalRMessages
     const string ClientMethodDockerComposeUp = "docker_compose_up";
     const string ServerMethodDockerComposeUpCompleted = "DockerComposeUpCompleted";
 
-    internal static void Register(HubConnection connection, StartStackService startStackService)
+    internal static void Register(
+        HubConnection connection,
+        StartStackService startStackService,
+        SingleProjectControlService singleProjectControlService,
+        IOptions<AppOptions> appOptions)
     {
         // Обработчик должен завершиться быстро: долгий compose блокирует цикл приёма SignalR (ping от сервера не обрабатываются → таймаут/разрыв).
         connection.On<DockerComposeUpRequest>(
@@ -21,7 +27,12 @@ internal static class DockerComposeUpSignalRMessages
                 Console.WriteLine(
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_up: id={request.Id}, StackName={request.StackName?.Trim() ?? "<null>"}, Version={request.Version?.Trim() ?? "<null>"}, Domain={request.Domain?.Trim()}");
 
-                _ = RunDockerComposeUpAsync(connection, startStackService, request);
+                _ = RunDockerComposeUpAsync(
+                    connection,
+                    startStackService,
+                    singleProjectControlService,
+                    appOptions.Value,
+                    request);
                 return Task.CompletedTask;
             });
     }
@@ -29,25 +40,29 @@ internal static class DockerComposeUpSignalRMessages
     static async Task RunDockerComposeUpAsync(
         HubConnection connection,
         StartStackService startStackService,
+        SingleProjectControlService singleProjectControlService,
+        AppOptions appOptions,
         DockerComposeUpRequest request)
     {
         try
         {
-            var result = await startStackService.ExecuteAsync(
-                request.StackName,
-                request.Version,
-                request.Domain,
-                CancellationToken.None);
+            var (ok, error, payload) = appOptions.IsSingleProjectMode
+                ? await ToTupleAsync(singleProjectControlService.StartAsync(CancellationToken.None))
+                : await ToTupleAsync(startStackService.ExecuteAsync(
+                    request.StackName,
+                    request.Version,
+                    request.Domain,
+                    CancellationToken.None));
 
             Console.WriteLine(
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_up завершен: id={request.Id}, ok={result.Ok}, error={result.Error ?? "<null>"}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_up завершен: id={request.Id}, ok={ok}, error={error ?? "<null>"}");
 
             await connection.InvokeAsync(
                 ServerMethodDockerComposeUpCompleted,
                 request.Id,
-                result.Ok,
-                result.Error,
-                new { running = result.Running, serviceLinks = result.ServiceLinks });
+                ok,
+                error,
+                payload);
         }
         catch (Exception ex)
         {
@@ -77,5 +92,17 @@ internal static class DockerComposeUpSignalRMessages
         public string? StackName { get; set; }
         public string? Version { get; set; }
         public string? Domain { get; set; }
+    }
+
+    static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<StartStackResult> task)
+    {
+        var result = await task;
+        return (result.Ok, result.Error, new { running = result.Running, serviceLinks = result.ServiceLinks });
+    }
+
+    static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<SingleProjectControlResult> task)
+    {
+        var result = await task;
+        return (result.Ok, result.Error, result.Payload);
     }
 }

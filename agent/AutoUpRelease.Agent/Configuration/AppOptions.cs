@@ -4,6 +4,9 @@ namespace AutoUpRelease.Agent;
 
 public sealed class AppOptions
 {
+    public bool IsSingleProjectMode =>
+        string.IsNullOrWhiteSpace(CopyFolderForDeployPath);
+
     [ConfigurationKeyName("SERVER_BACKEND_URL")]
     public string ServerBackendUrl { get; set; }
 
@@ -12,6 +15,9 @@ public sealed class AppOptions
 
     [ConfigurationKeyName("TYPE")]
     public string Type { get; set; } = "";
+
+    [ConfigurationKeyName("MODE")]
+    public string Mode { get; set; } = "";
 
     [ConfigurationKeyName("AGENT_RECONNECT_SECONDS")]
     public string AgentReconnectSeconds { get; set; }
@@ -27,6 +33,9 @@ public sealed class AppOptions
 
     [ConfigurationKeyName("COPY_FOLDER_FOR_DEPLOY_PATH")]
     public string CopyFolderForDeployPath { get; set; }
+
+    [ConfigurationKeyName("STACK_SINGLE_NAME")]
+    public string StackSingleName { get; set; } = "";
 
     [ConfigurationKeyName("STATE_PROJECT_FILE_NAME")]
     public string StateProjectFileName { get; set; }

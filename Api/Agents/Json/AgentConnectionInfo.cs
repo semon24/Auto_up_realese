@@ -4,6 +4,7 @@ public sealed class AgentConnectionInfo
 {
     public string Status { get; set; } = "";
     public string? Type { get; set; }
+    public string? Mode { get; set; }
     public string? IpAddress { get; set; }
     public DateTimeOffset? DisconnectedAtUtc { get; set; }
 }
