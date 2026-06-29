@@ -2,6 +2,15 @@ interface ApiErrorBody {
   error?: string;
 }
 
+export interface AuthState {
+  authenticated: boolean;
+}
+
+export interface LoginPayload {
+  userName: string;
+  password: string;
+}
+
 export function errMessage(e: unknown): string {
   if (e instanceof Error) {
     let msg = e.message;
@@ -32,4 +41,15 @@ export async function api<T>(
     throw new Error(data.error || res.statusText || "Ошибка запроса");
   }
   return data as T;
+}
+
+export function getAuthState(): Promise<AuthState> {
+  return api<AuthState>("/api/auth/me");
+}
+
+export function login(payload: LoginPayload): Promise<{ ok: true }> {
+  return api<{ ok: true }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

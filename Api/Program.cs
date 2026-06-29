@@ -1,4 +1,5 @@
 using AutoUpRelease.Api;
+using AutoUpRelease.Api.Auth;
 using AutoUpRelease.Api.Agents;
 using AutoUpRelease.Api.Agents.Hubs;
 using AutoUpRelease.Api.Agents.Json;
@@ -71,6 +72,7 @@ var app = builder.Build();
 var settings = app.Services.GetRequiredService<ResolvedAppOptions>();
 AgentsJsonBootstrap.EnsureExists(settings.AgentsJsonPath);
 app.UseCors();
+app.UseSimpleLoginAuth();
 
 var swaggerEnabled = app.Environment.IsDevelopment() || settings.EnableSwagger;
 if (swaggerEnabled)
@@ -83,6 +85,7 @@ if (swaggerEnabled)
     });
 }
 
+app.MapSimpleLoginEndpoints();
 app.MapGet("/api/health", () => Results.Json(new { ok = true }));
 
 app.MapAgentEndpoints();

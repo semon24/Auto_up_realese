@@ -5,7 +5,21 @@ namespace AutoUpRelease.Agent;
 public sealed class AppOptions
 {
     public bool IsSingleProjectMode =>
-        string.IsNullOrWhiteSpace(CopyFolderForDeployPath);
+        !IsMultiProjectMode && string.IsNullOrWhiteSpace(CopyFolderForDeployPath);
+
+    public bool IsMultiProjectMode =>
+        IsMultiProjectModeName(Mode);
+
+    public bool IsNewSingleProjectMode =>
+        !IsMultiProjectMode && !IsSingleProjectMode && IsSingleProjectRoot(ProjectDeploymentPath, StateProjectFileName);
+
+    public bool IsSingleProjectWorkspaceMode =>
+        IsSingleProjectMode || IsNewSingleProjectMode;
+
+    public bool NeedsNewSingleProjectInitialization =>
+        !IsSingleProjectMode &&
+        !HasLocalComposeFile(ProjectDeploymentPath) &&
+        IsEmptyOrStateOnlyProjectRoot(ProjectDeploymentPath, StateProjectFileName);
 
     [ConfigurationKeyName("SERVER_BACKEND_URL")]
     public string ServerBackendUrl { get; set; }
@@ -63,4 +77,54 @@ public sealed class AppOptions
 
     [ConfigurationKeyName("PortAllocation")]
     public PortAllocationOptions PortAllocation { get; set; }
+
+    public static bool HasLocalComposeFile(string? projectDir)
+    {
+        if (string.IsNullOrWhiteSpace(projectDir))
+            return false;
+
+        var normalizedProjectDir = projectDir.Trim();
+        var composeFileNames = new[]
+        {
+            "compose.yaml",
+            "compose.yml",
+            "docker-compose.yaml",
+            "docker-compose.yml"
+        };
+
+        return composeFileNames.Any(fileName => File.Exists(Path.Combine(normalizedProjectDir, fileName)));
+    }
+
+    static bool IsMultiProjectModeName(string? mode)
+    {
+        var normalized = mode?.Trim().ToLowerInvariant();
+        return normalized is "multy_project" or "multi_project" or "multy-project" or "multi-project";
+    }
+
+    static bool IsSingleProjectRoot(string? projectDir, string? stateFileName)
+    {
+        if (string.IsNullOrWhiteSpace(projectDir) || !Directory.Exists(projectDir.Trim()))
+            return false;
+
+        return HasLocalComposeFile(projectDir) || IsEmptyOrStateOnlyProjectRoot(projectDir, stateFileName);
+    }
+
+    static bool IsEmptyOrStateOnlyProjectRoot(string? projectDir, string? stateFileName)
+    {
+        if (string.IsNullOrWhiteSpace(projectDir) || !Directory.Exists(projectDir.Trim()))
+            return false;
+
+        var normalizedStateFileName = stateFileName?.Trim();
+        foreach (var entry in Directory.EnumerateFileSystemEntries(projectDir.Trim()))
+        {
+            var name = Path.GetFileName(entry);
+            if (!string.IsNullOrWhiteSpace(normalizedStateFileName) &&
+                string.Equals(name, normalizedStateFileName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return false;
+        }
+
+        return true;
+    }
 }

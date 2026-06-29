@@ -18,7 +18,7 @@ namespace AutoUpRelease.Agent.Services.SingleProjectControlService;
 
     public async Task<SingleProjectControlResult> StartAsync(CancellationToken ct = default)
     {
-        if (!_options.IsSingleProjectMode)
+        if (!_options.IsSingleProjectWorkspaceMode)
             return SingleProjectControlResult.Fail("Single-project режим не включён");
 
         SingleProjectControlContext? context = null;
@@ -102,7 +102,7 @@ namespace AutoUpRelease.Agent.Services.SingleProjectControlService;
 
     public async Task<SingleProjectControlResult> StopAsync(CancellationToken ct = default)
     {
-        if (!_options.IsSingleProjectMode)
+        if (!_options.IsSingleProjectWorkspaceMode)
             return SingleProjectControlResult.Fail("Single-project режим не включён");
 
         SingleProjectControlContext? context = null;
@@ -179,7 +179,7 @@ namespace AutoUpRelease.Agent.Services.SingleProjectControlService;
 
     public async Task<SingleProjectControlResult> RestartAsync(CancellationToken ct = default)
     {
-        if (!_options.IsSingleProjectMode)
+        if (!_options.IsSingleProjectWorkspaceMode)
             return SingleProjectControlResult.Fail("Single-project режим не включён");
 
         SingleProjectControlContext? context = null;

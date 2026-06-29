@@ -43,6 +43,16 @@ public static partial class DockerCompose
         await RunProcessAsync(composeDir, DockerComposeCli, all.ToArray(), env: GetComposeEnv(stackName));
     }
 
+    public static async Task RunPullAsync(
+        string composeDir,
+        IReadOnlyList<string>? composeFiles = null,
+        string? stackName = null,
+        IReadOnlyDictionary<string, string>? env = null)
+    {
+        var pullArgs = BuildComposeArgs(composeFiles, "pull");
+        await RunProcessAsync(composeDir, DockerComposeCli, pullArgs.ToArray(), env: env ?? GetComposeEnv(stackName));
+    }
+
     public static async Task<bool> IsRunningAsync(
         string composeDir,
         IReadOnlyList<string>? composeFiles = null,

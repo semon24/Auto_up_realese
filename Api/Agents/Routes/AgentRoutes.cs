@@ -167,6 +167,37 @@ public static class AgentRoutes
             return Results.Json(new { ok = true, payload });
         });
 
+        app.MapPost("/api/agents/{hostName}/update-version", async (
+            string hostName,
+            StartBody? body,
+            AgentSessionStore sessions,
+            AgentConnectionStatusFile agentsJson,
+            CancellationToken ct) =>
+        {
+            if (TryBuildReadonlyError(hostName, agentsJson) is { } readonlyError)
+                return readonlyError;
+
+            var stackName = body?.StackName?.Trim();
+            if (string.IsNullOrEmpty(stackName))
+                return Results.Json(new { error = "Нужен stackName" }, statusCode: 400);
+
+            var version = body?.Version?.Trim();
+            if (string.IsNullOrEmpty(version))
+                return Results.Json(new { error = "Нужна version" }, statusCode: 400);
+
+            var (ok, error, payload) = await sessions.StartUpdateVersionWithAgentAsync(
+                hostName,
+                stackName,
+                version,
+                TimeSpan.FromMinutes(15),
+                ct);
+
+            if (!ok)
+                return Results.Json(new { error = error ?? "Ошибка обновления версии на агенте" }, statusCode: 400);
+
+            return Results.Json(new { ok = true, payload });
+        });
+
         return app;
     }
 

@@ -45,7 +45,7 @@ internal static class DockerComposeStopSignalRMessages
     {
         try
         {
-            var (ok, error, payload) = appOptions.IsSingleProjectMode
+            var (ok, error, payload) = appOptions.IsSingleProjectWorkspaceMode
                 ? await ToTupleAsync(singleProjectControlService.StopAsync(CancellationToken.None))
                 : await ToTupleAsync(stopStackService.ExecuteAsync(
                     request.Tag,

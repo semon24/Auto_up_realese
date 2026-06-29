@@ -18,12 +18,19 @@ public sealed partial class StartStackService
         if (string.IsNullOrWhiteSpace(domain))
             domain = null;
             
+        var isSingleProjectWorkspace = _options.IsSingleProjectWorkspaceMode;
         var deployProjectsDir = _options.ProjectDeploymentPath.Trim();
         var folderForCopyDir = _options.CopyFolderForDeployPath.Trim();
         var stateFileName = _options.StateProjectFileName.Trim();
-        var stackDir = StackWorkspaceManager.GetStackDir(deployProjectsDir, stackName);
-        var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, stackName);
-        var stackStateFile = StackWorkspaceManager.GetStackStateFile(deployProjectsDir, stackName, stateFileName);
+        var stackDir = isSingleProjectWorkspace
+            ? deployProjectsDir
+            : StackWorkspaceManager.GetStackDir(deployProjectsDir, stackName);
+        var stackEnvFile = isSingleProjectWorkspace
+            ? Path.Combine(deployProjectsDir, ".env")
+            : StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, stackName);
+        var stackStateFile = isSingleProjectWorkspace
+            ? Path.Combine(deployProjectsDir, stateFileName)
+            : StackWorkspaceManager.GetStackStateFile(deployProjectsDir, stackName, stateFileName);
 
         return new StartStackContext(
             stackName,
@@ -34,13 +41,23 @@ public sealed partial class StartStackService
             stateFileName,
             stackDir,
             stackEnvFile,
-            stackStateFile);
+            stackStateFile,
+            isSingleProjectWorkspace);
     }
 
     private async Task<string?> EnsureNotRunningAsync(StartStackContext context)
     {
         if (!Directory.Exists(context.StackDir))
             return null;
+
+        if (context.IsSingleProjectWorkspace)
+        {
+            var stackNames = await StackStateStore.GetStackNamesAsync(context.StackStateFile);
+            var existingOtherStack = stackNames
+                .FirstOrDefault(x => !string.Equals(x, context.StackName, StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(existingOtherStack))
+                return $"Single-project уже инициализирован стеком '{existingOtherStack}'";
+        }
 
         var existingInfo = await StackStateStore.GetStackRuntimeInfoAsync(context.StackStateFile, context.StackName);
         if (existingInfo.Running ||

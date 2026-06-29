@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.SignalR.Client;
-using AutoUpRelease.Agent.Services.RestartStackService;
+using AutoUpRelease.Agent.Services.UpdateVersionService;
 
 namespace AutoUpRelease.Agent.Commands;
 
@@ -8,7 +8,7 @@ internal static class UpdateVersionServiceSignalRMessages
     const string ClientMethodUpdateVersion = "update_version";
     const string ServerMethodUpdateVersionCompleted = "UpdateVersionCompleted";
 
-    internal static void Register(HubConnection connection, RestartStackService restartStackService)
+    internal static void Register(HubConnection connection, UpdateVersionService updateVersionService)
     {
         connection.On<UpdateVersionRequest>(
             ClientMethodUpdateVersion,
@@ -18,28 +18,29 @@ internal static class UpdateVersionServiceSignalRMessages
                     return Task.CompletedTask;
 
                 Console.WriteLine(
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_down: id={request.Id}, tag={request.Tag?.Trim() ?? "<null>"}");
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда update_version: id={request.Id}, tag={request.Tag?.Trim() ?? "<null>"}, version={request.Version?.Trim() ?? "<null>"}");
 
-                _ = RunUpdateVersionAsync(connection, restartStackService, request);
+                _ = RunUpdateVersionAsync(connection, updateVersionService, request);
                 return Task.CompletedTask;
             });
     }
 
     static async Task RunUpdateVersionAsync(
         HubConnection connection,
-        RestartStackService restartStackService,
+        UpdateVersionService updateVersionService,
         UpdateVersionRequest request)
     {
         try
         {
             
 
-            var result = await restartStackService.ExecuteAsync(
+            var result = await updateVersionService.ExecuteAsync(
                 request.Tag,
+                request.Version,
                 CancellationToken.None);
 
             Console.WriteLine(
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_down завершен: id={request.Id}, ok={result.Ok}, error={result.Error ?? "<null>"}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] update_version завершен: id={request.Id}, ok={result.Ok}, error={result.Error ?? "<null>"}");
 
             await connection.InvokeAsync(
                 ServerMethodUpdateVersionCompleted,
@@ -51,7 +52,7 @@ internal static class UpdateVersionServiceSignalRMessages
         catch (Exception ex)
         {
             Console.Error.WriteLine(
-                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_down ошибка: id={request.Id}, message={ex.Message}");
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] update_version ошибка: id={request.Id}, message={ex.Message}");
 
             try
             {
@@ -65,7 +66,7 @@ internal static class UpdateVersionServiceSignalRMessages
             catch (Exception invokeEx)
             {
                 Console.Error.WriteLine(
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] docker_compose_down не смог отправить ответ на сервер: {invokeEx.Message}");
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] update_version не смог отправить ответ на сервер: {invokeEx.Message}");
             }
         }
     }
@@ -74,5 +75,6 @@ internal static class UpdateVersionServiceSignalRMessages
     {
         public string? Id { get; set; }
         public string? Tag { get; set; }
+        public string? Version { get; set; }
     }
 }

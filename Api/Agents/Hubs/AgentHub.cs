@@ -98,6 +98,12 @@ public sealed class AgentHub(
         return Task.CompletedTask;
     }
 
+    public Task UpdateVersionCompleted(string id, bool ok, string? error, object? payload)
+    {
+        sessions.HandleUpdateVersionCompleted(Context.ConnectionId, id, ok, error, payload);
+        return Task.CompletedTask;
+    }
+
     /// <remarks>
     /// Массив тегов через <see cref="JsonElement"/> — входящее тело могло прилететь как массив с полем <c>tag</c> без строгой привязки к типам клиента агента.
     /// </remarks>

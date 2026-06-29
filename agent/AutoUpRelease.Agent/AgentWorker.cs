@@ -9,6 +9,7 @@ using AutoUpRelease.Agent.Services.SingleProjectStateSyncService;
 using AutoUpRelease.Agent.Services.StartStackService;
 using AutoUpRelease.Agent.Services.StaleStartRecoveryService;
 using AutoUpRelease.Agent.Services.StopStackService;
+using AutoUpRelease.Agent.Services.UpdateVersionService;
 
 
 namespace AutoUpRelease.Agent;
@@ -21,6 +22,7 @@ public sealed class AgentWorker : BackgroundService
     private readonly DeleteStackService _deleteStackService;
     private readonly RestartStackService _restartStackService;
     private readonly StopStackService _stopStackService;
+    private readonly UpdateVersionService _updateVersionService;
     private readonly StaleStartRecoveryService _staleStartRecoveryService;
     private readonly SingleProjectControlService _singleProjectControlService;
     private readonly SingleProjectStateSyncService _singleProjectStateSyncService;
@@ -31,6 +33,7 @@ public sealed class AgentWorker : BackgroundService
         DeleteStackService deleteStackService,
         RestartStackService restartStackService,
         StopStackService stopStackService,
+        UpdateVersionService updateVersionService,
         SingleProjectControlService singleProjectControlService,
         StaleStartRecoveryService staleStartRecoveryService,
         SingleProjectStateSyncService singleProjectStateSyncService)
@@ -40,6 +43,7 @@ public sealed class AgentWorker : BackgroundService
         _deleteStackService = deleteStackService;
         _restartStackService = restartStackService;
         _stopStackService = stopStackService;
+        _updateVersionService = updateVersionService;
         _singleProjectControlService = singleProjectControlService;
         _staleStartRecoveryService = staleStartRecoveryService;
         _singleProjectStateSyncService = singleProjectStateSyncService;
@@ -67,7 +71,9 @@ public sealed class AgentWorker : BackgroundService
     {
         var agentMode = _appOptions.IsSingleProjectMode
             ? "single-project"
-            : _appOptions.Mode;
+            : _appOptions.IsNewSingleProjectMode
+                ? "new-solo-project"
+                : _appOptions.Mode;
         var connection = AgentSignalRConnection.Create(hostName, _appOptions.Type, agentMode);
         var disconnectedTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var aggregationCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
@@ -102,6 +108,7 @@ public sealed class AgentWorker : BackgroundService
         DockerComposeDownSignalRMessages.Register(connection, _deleteStackService);
         DockerComposeRestartSignalRMessages.Register(connection, _restartStackService, _singleProjectControlService, new OptionsWrapper<AppOptions>(_appOptions));
         DockerComposeStopSignalRMessages.Register(connection, _stopStackService, _singleProjectControlService, new OptionsWrapper<AppOptions>(_appOptions));
+        UpdateVersionServiceSignalRMessages.Register(connection, _updateVersionService);
         UpdateHarborTagsSignalRMessages.Register(connection, _appOptions);
         try
         {
@@ -152,7 +159,7 @@ public sealed class AgentWorker : BackgroundService
             var projectStatesUpdated = await RefreshProjectStatesAsync(cancellationToken);
 
             var stacksCount = 0;
-            if (_appOptions.IsSingleProjectMode)
+            if (_appOptions.IsSingleProjectWorkspaceMode)
             {
                 stacksCount = await AgentsStateFileBuilder.BuildSingleProjectAgentsStateAsync(
                     _appOptions.ProjectDeploymentPath.Trim(),
@@ -207,7 +214,7 @@ public sealed class AgentWorker : BackgroundService
         var deployDir = _appOptions.ProjectDeploymentPath.Trim();
         var stateFileName = _appOptions.StateProjectFileName.Trim();
 
-        if (_appOptions.IsSingleProjectMode)
+        if (_appOptions.IsSingleProjectWorkspaceMode)
             return await _singleProjectStateSyncService.SyncAsync(cancellationToken);
 
         if (!Directory.Exists(deployDir))

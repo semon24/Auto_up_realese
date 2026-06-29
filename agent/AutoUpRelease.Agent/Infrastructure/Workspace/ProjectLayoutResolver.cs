@@ -6,7 +6,7 @@ public static class ProjectLayoutResolver
     {
         var deployPath = options.ProjectDeploymentPath.Trim();
 
-        if (options.IsSingleProjectMode)
+        if (options.IsSingleProjectWorkspaceMode)
             return deployPath;
 
         return Path.Combine(deployPath, stackName);

@@ -12,7 +12,8 @@ internal static class AgentPasswordBootstrap
             return;
 
         var fullPath = Path.GetFullPath(path);
-        if (FileHasNonEmptyPassword(fullPath))
+        var existingPassword = TryReadPasswordFromFile(fullPath);
+        if (!string.IsNullOrWhiteSpace(existingPassword) && !IsOldGeneratedPassword(existingPassword))
         {
             Console.WriteLine($"[agent] пароль уже есть в {fullPath}, перезапись не выполняется");
             return;
@@ -57,19 +58,31 @@ internal static class AgentPasswordBootstrap
         }
     }
 
-    static bool FileHasNonEmptyPassword(string fullPath)
+    static string? TryReadPasswordFromFile(string fullPath)
     {
         if (!File.Exists(fullPath))
-            return false;
+            return null;
 
         try
         {
             var text = File.ReadAllText(fullPath);
             using var doc = JsonDocument.Parse(text);
             if (!doc.RootElement.TryGetProperty("password", out var el) || el.ValueKind != JsonValueKind.String)
-                return false;
+                return null;
             var password = el.GetString();
-            return !string.IsNullOrWhiteSpace(password);
+            return string.IsNullOrWhiteSpace(password) ? null : password;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    static bool IsOldGeneratedPassword(string password)
+    {
+        try
+        {
+            return Convert.FromBase64String(password).Length == 32;
         }
         catch
         {
@@ -79,8 +92,7 @@ internal static class AgentPasswordBootstrap
 
     static string GeneratePassword()
     {
-        var bytes = new byte[32];
-        RandomNumberGenerator.Fill(bytes);
-        return Convert.ToBase64String(bytes);
+        const string alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        return RandomNumberGenerator.GetString(alphabet, 32);
     }
 }

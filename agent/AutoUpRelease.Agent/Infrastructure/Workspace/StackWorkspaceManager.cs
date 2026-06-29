@@ -19,6 +19,12 @@ public static class StackWorkspaceManager
         CopyDirectoryRecursive(folderForCopyDir, stackDir);
     }
 
+    public static void EnsureWorkspaceFiles(string folderForCopyDir, string stackDir)
+    {
+        Directory.CreateDirectory(stackDir);
+        CopyDirectoryRecursive(folderForCopyDir, stackDir);
+    }
+
     public static void DeleteStackWorkspace(string stackDir)
     {
         if (!Directory.Exists(stackDir))

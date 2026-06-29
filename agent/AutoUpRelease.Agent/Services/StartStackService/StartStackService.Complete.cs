@@ -44,12 +44,7 @@ public sealed partial class StartStackService
             }
         }
 
-        await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
-            context.DeployProjectsDir,
-            context.StateFileName,
-            _options.AgentsJsonFilePath,
-            _options.AgentHostName,
-            _options.ServiceLinkEnvKeys);
+        await BuildAgentsStateAsync(context);
 
         return StartStackResult.OkResult(serviceLinks);
     }
@@ -62,23 +57,36 @@ public sealed partial class StartStackService
             operationType: "start",
             operationStatus: "deleting",
             error: error);
-        await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
-            context.DeployProjectsDir,
-            context.StateFileName,
-            _options.AgentsJsonFilePath,
-            _options.AgentHostName,
-            _options.ServiceLinkEnvKeys);
+        await BuildAgentsStateAsync(context);
 
-        await StackCleanupService.CleanupStackAsync(
-            context.StackDir,
-            context.StackName,
-            context.StackStateFile);
+        if (!context.IsSingleProjectWorkspace)
+        {
+            await StackCleanupService.CleanupStackAsync(
+                context.StackDir,
+                context.StackName,
+                context.StackStateFile);
+            await BuildAgentsStateAsync(context);
+        }
+        return StartStackResult.Fail(error);
+    }
+
+    async Task BuildAgentsStateAsync(StartStackContext context)
+    {
+        if (context.IsSingleProjectWorkspace)
+        {
+            await AgentsStateFileBuilder.BuildSingleProjectAgentsStateAsync(
+                context.DeployProjectsDir,
+                context.StateFileName,
+                _options.AgentsJsonFilePath,
+                _options.AgentHostName);
+            return;
+        }
+
         await AgentsStateFileBuilder.BuildAggregatedAgentsStateAsync(
             context.DeployProjectsDir,
             context.StateFileName,
             _options.AgentsJsonFilePath,
             _options.AgentHostName,
             _options.ServiceLinkEnvKeys);
-        return StartStackResult.Fail(error);
     }
 }

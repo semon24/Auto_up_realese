@@ -45,7 +45,7 @@ internal static class DockerComposeRestartSignalRMessages
     {
         try
         {
-            var (ok, error, payload) = appOptions.IsSingleProjectMode
+            var (ok, error, payload) = appOptions.IsSingleProjectWorkspaceMode
                 ? await ToTupleAsync(singleProjectControlService.RestartAsync(CancellationToken.None))
                 : await ToTupleAsync(restartStackService.ExecuteAsync(
                     request.Tag,

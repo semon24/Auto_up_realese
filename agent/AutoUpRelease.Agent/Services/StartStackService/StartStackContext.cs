@@ -9,4 +9,5 @@ sealed record StartStackContext(
     string StateFileName,
     string StackDir,
     string StackEnvFile,
-    string StackStateFile);
+    string StackStateFile,
+    bool IsSingleProjectWorkspace);

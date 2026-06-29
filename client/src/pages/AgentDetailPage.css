@@ -430,6 +430,42 @@
   padding-top: 0.5rem;
 }
 
+.agent-detail__version-update {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid #30363d;
+  border-bottom: 1px solid #30363d;
+}
+
+.agent-detail__version-update-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.agent-detail__update-version {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #2ea043;
+  border-radius: 8px;
+  background: #238636;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.agent-detail__update-version:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.agent-detail__update-version:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .agent-detail__domains-section {
   display: flex;
   flex-direction: column;
@@ -607,6 +643,10 @@
 }
 
 @media (max-width: 640px) {
+  .agent-detail__version-update-row {
+    grid-template-columns: 1fr;
+  }
+
   .agent-detail__project-actions {
     flex-direction: column;
     align-items: stretch;

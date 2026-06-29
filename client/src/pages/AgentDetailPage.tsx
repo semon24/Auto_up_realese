@@ -48,6 +48,11 @@ function isSingleProjectAgent(mode?: string | null) {
   return normalized === "single-project" || normalized === "single_project" || normalized === "singleproject";
 }
 
+function isNewSoloProjectAgent(mode?: string | null) {
+  const normalized = mode?.trim().toLowerCase();
+  return normalized === "new-solo-project" || normalized === "new_solo_project" || normalized === "newsoloproject";
+}
+
 function buildStackName(projectName: string) {
   const normalized = projectName
     .trim()
@@ -97,6 +102,7 @@ export function AgentDetailPage() {
   const agentStatus = agentInfo?.status;
   const readonlyAgent = isReadonlyAgent(agentInfo?.type);
   const singleProjectAgent = isSingleProjectAgent(agentInfo?.mode);
+  const newSoloProjectAgent = isNewSoloProjectAgent(agentInfo?.mode);
   const agentDisconnectedAtText = useMemo(() => {
     const raw = agentInfo?.disconnectedAtUtc?.trim();
     if (!raw) return null;
@@ -123,8 +129,11 @@ export function AgentDetailPage() {
   const [lastStartedTag, setLastStartedTag] = useState<string | null>(null);
   const [managedProjectOverride, setManagedProjectOverride] = useState<ManagedProjectOverride | null>(null);
   const [pausingProject, setPausingProject] = useState(false);
+  const [startingProject, setStartingProject] = useState(false);
   const [stoppingProject, setStoppingProject] = useState(false);
   const [restartingProject, setRestartingProject] = useState(false);
+  const [updatingVersion, setUpdatingVersion] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState("");
   const isTagRoute = selectedTagFromRoute.length > 0;
 
   const needsPassword = agentStatus === AGENT_STATUS_WAITING_PASSWORD;
@@ -136,7 +145,11 @@ export function AgentDetailPage() {
     );
     return runningStack?.tag ?? null;
   }, [agentStacks]);
-  const managedTag = selectedTagFromRoute || lastStartedTag || runningTagFromStatus;
+  const initializedNewSoloStack = newSoloProjectAgent
+    ? agentStacks.find((stack) => !!stack.version?.trim()) ?? null
+    : null;
+  const newSoloFallbackTag = initializedNewSoloStack?.tag ?? null;
+  const managedTag = selectedTagFromRoute || lastStartedTag || runningTagFromStatus || newSoloFallbackTag;
   const managedStack = useMemo(
     () => agentStacks.find((stack) => stack.tag === managedTag) ?? null,
     [managedTag, agentStacks]
@@ -195,7 +208,7 @@ export function AgentDetailPage() {
         : "agent-detail__status-line";
   const shouldShowManagedLinks = isManagedProjectReady && linkEntries.length > 0;
   const isProjectActionPending =
-    pausingProject || stoppingProject || restartingProject;
+    pausingProject || startingProject || stoppingProject || restartingProject || updatingVersion;
   const isManagedProjectStarting =
     effectiveManagedOperationStatus === "starting" ||
     (isManagedProjectLoading && !isManagedProjectRunning);
@@ -222,6 +235,20 @@ export function AgentDetailPage() {
     !readonlyAgent;
   const canDeleteManagedProject =
     hasManagedProject && !isManagedProjectLoading && !isProjectActionPending && !readonlyAgent;
+  const canUpdateManagedVersion =
+    hasManagedProject &&
+    updateVersion.trim().length > 0 &&
+    !isManagedProjectLoading &&
+    !isProjectActionPending &&
+    !readonlyAgent;
+  const canInitializeNewSoloProject =
+    newSoloProjectAgent &&
+    !initializedNewSoloStack &&
+    !isManagedProjectLoading &&
+    !readonlyAgent;
+  const visibleAgentTags = newSoloProjectAgent && canInitializeNewSoloProject
+    ? []
+    : agentTags;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -286,7 +313,12 @@ export function AgentDetailPage() {
     const version = launchVersion.trim();
     const domain = launchDomain.trim();
 
-    if (!projectName) {
+    if (newSoloProjectAgent && !canInitializeNewSoloProject) {
+      setLaunchError("Solo-project already initialized");
+      return;
+    }
+
+    if (!newSoloProjectAgent && !projectName) {
       setLaunchError("Введите имя проекта");
       return;
     }
@@ -295,7 +327,9 @@ export function AgentDetailPage() {
       setLaunchError("Введите версию для запуска");
       return;
     }
-    const stackName = buildStackName(projectName);
+    const stackName = newSoloProjectAgent
+      ? buildStackName("single-project")
+      : buildStackName(projectName);
     setManagedProjectOverride(null);
     setLaunching(true);
     try {
@@ -393,7 +427,7 @@ export function AgentDetailPage() {
       setLaunchError("Для этого стека не найдена версия. Обновите статус.");
       return;
     }
-    setPausingProject(true);
+    setStartingProject(true);
     try {
       const res = await api<DockerComposeUpResponse>(
         `/api/agents/${encodeURIComponent(hostName)}/docker-compose-up`,
@@ -413,7 +447,7 @@ export function AgentDetailPage() {
     } catch (err) {
       setLaunchError(errMessage(err));
     } finally {
-      setPausingProject(false);
+      setStartingProject(false);
     }
   }
 
@@ -438,6 +472,43 @@ export function AgentDetailPage() {
       setLaunchError(errMessage(err));
     } finally {
       setRestartingProject(false);
+    }
+  }
+
+  async function onUpdateManagedVersion(e: FormEvent) {
+    e.preventDefault();
+    if (!managedTag) return;
+    if (readonlyAgent) return;
+
+    const version = updateVersion.trim();
+    if (!version) {
+      setLaunchError("Введите версию для обновления");
+      return;
+    }
+
+    setLaunchError(null);
+    setLaunchOk(null);
+    setManagedProjectOverride(null);
+    setUpdatingVersion(true);
+    try {
+      await api<{ ok?: boolean }>(
+        `/api/agents/${encodeURIComponent(hostName)}/update-version`,
+        {
+          method: "POST",
+          body: JSON.stringify({ stackName: managedTag, version }),
+        }
+      );
+      setLaunchOk(`Версия ${managedTag} обновлена до ${version}.`);
+      setManagedProjectOverride({
+        tag: managedTag,
+        running: true,
+        operationStatus: "success",
+      });
+      await loadStatus();
+    } catch (err) {
+      setLaunchError(errMessage(err));
+    } finally {
+      setUpdatingVersion(false);
     }
   }
 
@@ -583,9 +654,9 @@ export function AgentDetailPage() {
         agentStatus === AGENT_STATUS_PASSWORD_ACCEPTED && (
           <>
             <div className="agent-detail__launch-section">
-              {agentTags.length > 0 && (
+              {visibleAgentTags.length > 0 && (
                 <div className="agent-detail__tags-grid">
-                  {agentTags.map((tag) => (
+                  {visibleAgentTags.map((tag) => (
                     (() => {
                       const stackForTag =
                         agentStacks.find((stack) => stack.tag === tag) ?? null;
@@ -648,7 +719,7 @@ export function AgentDetailPage() {
                   ))}
                 </div>
               )}
-              {!singleProjectAgent && (
+              {!singleProjectAgent && (!newSoloProjectAgent || canInitializeNewSoloProject) && (
                 <>
                   <button
                     type="button"
@@ -664,13 +735,18 @@ export function AgentDetailPage() {
                         className="agent-detail__form agent-detail__form--launch"
                         onSubmit={(e) => void onLaunch(e)}
                       >
-                        <label className="agent-detail__label" htmlFor="agent-launch-project-name">
+                        <label
+                          className="agent-detail__label"
+                          htmlFor="agent-launch-project-name"
+                          style={{ display: newSoloProjectAgent ? "none" : undefined }}
+                        >
                           Имя проекта
                         </label>
                         <input
                           id="agent-launch-project-name"
                           type="text"
                           className="agent-detail__input"
+                          style={{ display: newSoloProjectAgent ? "none" : undefined }}
                           value={launchProjectName}
                           onChange={(e) => setLaunchProjectName(e.target.value)}
                           placeholder="Например, demo"
@@ -755,6 +831,40 @@ export function AgentDetailPage() {
               </p>
             ) : null}
           </div>
+          <form className="agent-detail__version-update" onSubmit={onUpdateManagedVersion}>
+            <label className="agent-detail__label" htmlFor="agent-update-version">
+              Новая версия образа
+            </label>
+            <div className="agent-detail__version-update-row">
+              <input
+                id="agent-update-version"
+                list="agent-update-tags"
+                type="text"
+                className="agent-detail__input"
+                value={updateVersion}
+                onFocus={() => void loadTags(hostName)}
+                onChange={(e) => setUpdateVersion(e.target.value)}
+                placeholder={managedStack?.version?.trim() || "Введите или выберите версию"}
+                autoComplete="off"
+              />
+              <datalist id="agent-update-tags">
+                {tagItemsForHost.map((item) => (
+                  <option key={item.tag} value={item.tag} />
+                ))}
+              </datalist>
+              <button
+                type="submit"
+                className="agent-detail__update-version"
+                disabled={!canUpdateManagedVersion}
+              >
+                {updatingVersion ? "Обновляем..." : "Обновить версию"}
+              </button>
+            </div>
+            {tagsLoading && (
+              <p className="agent-detail__hint">Загружаем версии из Harbor...</p>
+            )}
+            {tagsError && <p className="agent-detail__error">{tagsError}</p>}
+          </form>
           <p className={managedOperationStatusClassName}>
             Статус запуска:{" "}
             <strong>
@@ -823,13 +933,15 @@ export function AgentDetailPage() {
                   : onStartManagedProject())
               }
             >
-              {pausingProject || isManagedProjectStarting
-                ? "Запускаем..."
+              {pausingProject
+                ? "Останавливаем..."
+                : startingProject || isManagedProjectStarting
+                  ? "Запускаем..."
                 : shouldRenderPauseAction
                   ? "Остановить сервис"
                   : "Запустить сервис"}
             </button>
-            {!singleProjectAgent && (
+            {!singleProjectAgent && !newSoloProjectAgent && (
               <button
                 type="button"
                 className="agent-detail__stop-project"

@@ -13,12 +13,16 @@ public sealed class SingleProjectStateSyncService
 
     public async Task<int> SyncAsync(CancellationToken cancellationToken = default)
     {
-        if (!_options.IsSingleProjectMode)
+        if (!_options.IsSingleProjectWorkspaceMode)
+            return 0;
+
+        if (_options.NeedsNewSingleProjectInitialization)
             return 0;
 
         var projectDir = _options.ProjectDeploymentPath.Trim();
         var stackStateFile = Path.Combine(projectDir, _options.StateProjectFileName.Trim());
         var stackEnvFile = Path.Combine(projectDir, ".env");
+        var hasLocalComposeFile = AppOptions.HasLocalComposeFile(projectDir);
         var servicesStateByStackName = new Dictionary<string, Dictionary<string, DockerServiceState>>(StringComparer.Ordinal);
 
 
@@ -33,9 +37,11 @@ public sealed class SingleProjectStateSyncService
         {
             if (!servicesStateByStackName.TryGetValue(stackName, out var servicesState))
             {
-                servicesState = await DockerCompose.GetServicesStateAsync(
-                    projectDir,
-                    stackName: stackName);
+                servicesState = hasLocalComposeFile
+                    ? await DockerCompose.GetServicesStateAsync(
+                        projectDir,
+                        stackName: stackName)
+                    : new Dictionary<string, DockerServiceState>(StringComparer.Ordinal);
 
                 servicesStateByStackName[stackName] = servicesState;
             }
@@ -51,6 +57,16 @@ public sealed class SingleProjectStateSyncService
                     serviceDomains);
             }
             await StackStateStore.SaveStackServicesStateAsync(stackStateFile, stackName, servicesState);
+            if (_options.IsSingleProjectMode &&
+                HasAllBlockingServicesRunning(servicesState) &&
+                await CanMarkStartSuccessAsync(stackStateFile, stackName))
+            {
+                await StackStateStore.SetOperationAsync(
+                    stackStateFile,
+                    stackName,
+                    operationType: "start",
+                    operationStatus: "success");
+            }
             updated++;
         }
 
@@ -101,5 +117,23 @@ public sealed class SingleProjectStateSyncService
             .Select(x => $"{x}.{normalizedRootDomain}")
             .Distinct()
             .ToList();
+    }
+
+    static bool HasAllBlockingServicesRunning(IReadOnlyDictionary<string, DockerServiceState> services)
+    {
+        var blockingServices = services
+            .Where(kv => !string.Equals(kv.Key, "migrator", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return blockingServices.Count > 0 &&
+            blockingServices.All(kv => string.Equals(kv.Value.State, "running", StringComparison.OrdinalIgnoreCase));
+    }
+
+    static async Task<bool> CanMarkStartSuccessAsync(string stackStateFile, string stackName)
+    {
+        var status = await StackStateStore.GetOperationStatusAsync(stackStateFile, stackName);
+        return string.IsNullOrWhiteSpace(status) ||
+            string.Equals(status, "in_progress", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "starting", StringComparison.OrdinalIgnoreCase);
     }
 }

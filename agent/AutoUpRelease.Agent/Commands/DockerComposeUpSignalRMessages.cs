@@ -46,7 +46,11 @@ internal static class DockerComposeUpSignalRMessages
     {
         try
         {
-            var (ok, error, payload) = appOptions.IsSingleProjectMode
+            var shouldUseSingleProjectControl =
+                appOptions.IsSingleProjectMode ||
+                (appOptions.IsNewSingleProjectMode && !appOptions.NeedsNewSingleProjectInitialization);
+
+            var (ok, error, payload) = shouldUseSingleProjectControl
                 ? await ToTupleAsync(singleProjectControlService.StartAsync(CancellationToken.None))
                 : await ToTupleAsync(startStackService.ExecuteAsync(
                     request.StackName,

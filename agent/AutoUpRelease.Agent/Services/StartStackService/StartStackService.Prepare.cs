@@ -7,7 +7,10 @@ public sealed partial class StartStackService
     private async Task PrepareStackAsync(StartStackContext context, CancellationToken ct)
     {
         await DockerCompose.LoginAsync(_options.RegistryUrl, _options.RegistryUser, _options.RegistryPassword);
-        StackWorkspaceManager.EnsureStackWorkspace(context.FolderForCopyDir, context.StackDir);
+        if (context.IsSingleProjectWorkspace)
+            StackWorkspaceManager.EnsureWorkspaceFiles(context.FolderForCopyDir, context.StackDir);
+        else
+            StackWorkspaceManager.EnsureStackWorkspace(context.FolderForCopyDir, context.StackDir);
 
         if (!File.Exists(context.StackStateFile))
             await File.WriteAllTextAsync(context.StackStateFile, "{}", ct);
