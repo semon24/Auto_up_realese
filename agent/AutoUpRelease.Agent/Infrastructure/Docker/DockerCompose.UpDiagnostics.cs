@@ -34,17 +34,37 @@ public static partial class DockerCompose
                 env);
         }
 
-        var (stdout, stderr, exitCode) = await RunProcessCaptureAsync(
-            composeDir,
-            DockerComposeCli,
-            upArgs.ToArray(),
-            env);
+        string stdout;
+        string stderr;
+        int exitCode;
+        try
+        {
+            (stdout, stderr, exitCode) = await RunProcessCaptureAsync(
+                composeDir,
+                DockerComposeCli,
+                upArgs.ToArray(),
+                env,
+                timeout: TimeSpan.FromMinutes(5));
+        }
+        catch (TimeoutException ex)
+        {
+            if (progressTask is not null)
+            {
+                progressCts.Cancel();
+                await progressTask;
+            }
+
+            await LogServicesDiagnosticsAsync(composeDir, env, composeFiles, stackName);
+            throw new InvalidOperationException(ex.Message, ex);
+        }
 
         if (progressTask is not null)
         {
             progressCts.Cancel();
             await progressTask;
         }
+
+        await LogPostUpSnapshotAsync(composeDir, env, composeFiles, stackName, stdout, stderr);
 
         if (exitCode == 0)
             return;
@@ -60,6 +80,38 @@ public static partial class DockerCompose
 
         throw new InvalidOperationException(
             $"{composeError}{Environment.NewLine}{Environment.NewLine}Последние логи сервиса '{failedService}':{Environment.NewLine}{serviceLogs}");
+    }
+
+    public static async Task LogServicesDiagnosticsAsync(
+        string composeDir,
+        IReadOnlyDictionary<string, string>? env = null,
+        IReadOnlyList<string>? composeFiles = null,
+        string? stackName = null,
+        int tailLines = 40)
+    {
+        env ??= GetComposeEnv(stackName);
+        var servicesState = await GetServicesStateAsync(composeDir, composeFiles, stackName, env);
+        if (servicesState.Count > 0)
+        {
+            var summary = string.Join(
+                ", ",
+                servicesState
+                    .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                    .Select(kv => $"{kv.Key}={kv.Value.State}{(string.IsNullOrWhiteSpace(kv.Value.Health) ? string.Empty : $"/{kv.Value.Health}")}"));
+            Console.WriteLine($"[docker] diagnostics services: {summary}");
+        }
+
+        var psArgs = BuildComposeArgs(composeFiles, "ps", "--all");
+        var (psStdout, psStderr, psExitCode) = await RunProcessCaptureAsync(composeDir, DockerComposeCli, psArgs.ToArray(), env);
+        Console.WriteLine(
+            $"[docker] diagnostics ps exit={psExitCode} output={FormatDiagnosticBlock(psStdout, psStderr)}");
+
+        foreach (var serviceName in servicesState.Keys.OrderBy(x => x, StringComparer.Ordinal))
+        {
+            var serviceLogs = await TryGetServiceLogsAsync(composeDir, serviceName, composeFiles, tailLines, stackName);
+            if (!string.IsNullOrWhiteSpace(serviceLogs))
+                Console.WriteLine($"[docker] diagnostics logs service={serviceName}:{Environment.NewLine}{serviceLogs}");
+        }
     }
 
     static string BuildComposeErrorText(string stdout, string stderr, int exitCode)
@@ -111,6 +163,44 @@ public static partial class DockerCompose
             return Truncate(stderr.Trim(), 6000);
 
         return null;
+    }
+
+    static async Task LogPostUpSnapshotAsync(
+        string composeDir,
+        IReadOnlyDictionary<string, string>? env,
+        IReadOnlyList<string>? composeFiles,
+        string? stackName,
+        string stdout,
+        string stderr)
+    {
+        if (!string.IsNullOrWhiteSpace(stdout) || !string.IsNullOrWhiteSpace(stderr))
+            Console.WriteLine($"[docker] post-up output={FormatDiagnosticBlock(stdout, stderr)}");
+
+        var servicesState = await GetServicesStateAsync(composeDir, composeFiles, stackName, env);
+        if (servicesState.Count == 0)
+        {
+            Console.WriteLine("[docker] post-up services snapshot=<empty>");
+            return;
+        }
+
+        var summary = string.Join(
+            ", ",
+            servicesState
+                .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                .Select(kv => $"{kv.Key}={kv.Value.State}{(string.IsNullOrWhiteSpace(kv.Value.Health) ? string.Empty : $"/{kv.Value.Health}")}"));
+        Console.WriteLine($"[docker] post-up services: {summary}");
+    }
+
+    static string FormatDiagnosticBlock(string stdout, string stderr)
+    {
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(stdout))
+            sb.AppendLine(stdout.Trim());
+        if (!string.IsNullOrWhiteSpace(stderr))
+            sb.AppendLine(stderr.Trim());
+
+        var combined = sb.ToString().Trim();
+        return string.IsNullOrWhiteSpace(combined) ? "<empty>" : Truncate(combined, 6000);
     }
 
     static string Truncate(string value, int maxChars)
