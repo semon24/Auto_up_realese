@@ -15,15 +15,6 @@ public sealed partial class StartStackService
         var composeEnv = await StackStateStore.GetComposeRuntimeEnvAsync(
             context.StackStateFile,
             context.StackName);
-        var runtimeEnvForLog = composeEnv
-            .Where(kv =>
-                string.Equals(kv.Key, "STACK_NAME", StringComparison.Ordinal) ||
-                kv.Key.EndsWith("_PORT", StringComparison.Ordinal))
-            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
-            .Select(kv => $"{kv.Key}={kv.Value}")
-            .ToArray();
-        Console.WriteLine(
-            $"[start-stack] этап=runtime_env stack={context.StackName} state={context.StackStateFile} envFile={context.StackEnvFile} values={(runtimeEnvForLog.Length == 0 ? "<empty>" : string.Join(", ", runtimeEnvForLog))}");
 
         await DockerCompose.RunUpDetachedWithDiagnosticsAsync(
             context.StackDir,
@@ -44,14 +35,6 @@ public sealed partial class StartStackService
 
         Console.WriteLine(
             $"[start-stack] этап=wait_services_ready finished isReady={waitResult.IsReady} hasFailure={waitResult.HasFailure} reason={waitResult.Reason ?? "<null>"}");
-
-        if (!waitResult.IsReady)
-        {
-            await DockerCompose.LogServicesDiagnosticsAsync(
-                context.StackDir,
-                composeEnv,
-                stackName: context.StackName);
-        }
 
         return waitResult;
     }

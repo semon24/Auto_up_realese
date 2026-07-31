@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errMessage } from "../apiClient";
 import "./AgentDetailPage.css";
@@ -10,9 +10,10 @@ import {
 import { usePolling } from "../pollingContext";
 import { useAppStore } from "../store/appStore";
 import "../components/StackCard/StackCard.css";
-import type { ServiceLinks, SslCertificateInfo } from "../types";
+import type { RegistryChannel, ServiceLinks, SslCertificateInfo } from "../types";
 import { ServiceStatesTable } from "../components/ServiceStatesTable/ServiceStatesTable";
 import { ServiceLinks as ServiceLinksBlock } from "../components/ServiceLinks/ServiceLinks";
+import { buildTagCacheKey } from "../utils/registryChannel";
 
 interface DockerComposeUpPayload {
   running?: boolean;
@@ -53,6 +54,14 @@ function isNewSoloProjectAgent(mode?: string | null) {
   return normalized === "new-solo-project" || normalized === "new_solo_project" || normalized === "newsoloproject";
 }
 
+function isMultiProjectAgent(mode?: string | null) {
+  const normalized = mode?.trim().toLowerCase();
+  return normalized === "multy_project" ||
+    normalized === "multi_project" ||
+    normalized === "multy-project" ||
+    normalized === "multi-project";
+}
+
 function buildStackName(projectName: string) {
   const normalized = projectName
     .trim()
@@ -77,6 +86,7 @@ export function AgentDetailPage() {
       return hostNameParam;
     }
   }, [hostNameParam]);
+  const [registryChannel, setRegistryChannel] = useState<RegistryChannel>("stage");
 
   const {
     status,
@@ -85,9 +95,6 @@ export function AgentDetailPage() {
     tagsErrorByHost,
   } = useAppStore();
 
-  const tagItemsForHost = tagsByHost[hostName] ?? [];
-  const tagsLoading = tagsLoadingHost === hostName;
-  const tagsError = tagsErrorByHost[hostName] ?? null;
   const { loadStatus, loadTags } = usePolling();
   const selectedTagFromRoute = useMemo(() => {
     if (!tagParam) return "";
@@ -103,6 +110,14 @@ export function AgentDetailPage() {
   const readonlyAgent = isReadonlyAgent(agentInfo?.type);
   const singleProjectAgent = isSingleProjectAgent(agentInfo?.mode);
   const newSoloProjectAgent = isNewSoloProjectAgent(agentInfo?.mode);
+  const multiProjectAgent = isMultiProjectAgent(agentInfo?.mode);
+  const tagsCacheKey = buildTagCacheKey(
+    hostName,
+    multiProjectAgent ? registryChannel : undefined
+  );
+  const tagItemsForHost = tagsByHost[tagsCacheKey] ?? [];
+  const tagsLoading = tagsLoadingHost === tagsCacheKey;
+  const tagsError = tagsErrorByHost[tagsCacheKey] ?? null;
   const agentDisconnectedAtText = useMemo(() => {
     const raw = agentInfo?.disconnectedAtUtc?.trim();
     if (!raw) return null;
@@ -113,6 +128,12 @@ export function AgentDetailPage() {
     return parsed.toLocaleString("ru-RU");
   }, [agentInfo?.disconnectedAtUtc]);
   const agentStacks = status.stacksByHost[hostName] ?? [];
+  const channelStacks = useMemo(
+    () => multiProjectAgent
+      ? agentStacks.filter((stack) => stack.registryChannel === registryChannel)
+      : agentStacks,
+    [agentStacks, multiProjectAgent, registryChannel]
+  );
   const [password, setPassword] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -154,6 +175,12 @@ export function AgentDetailPage() {
     () => agentStacks.find((stack) => stack.tag === managedTag) ?? null,
     [managedTag, agentStacks]
   );
+  useEffect(() => {
+    const projectChannel = managedStack?.registryChannel;
+    if (isTagRoute && multiProjectAgent && (projectChannel === "stage" || projectChannel === "release")) {
+      setRegistryChannel(projectChannel);
+    }
+  }, [isTagRoute, managedStack?.registryChannel, multiProjectAgent]);
   const effectiveManagedRunning =
     managedProjectOverride?.tag === managedTag
       ? managedProjectOverride.running
@@ -166,12 +193,12 @@ export function AgentDetailPage() {
     () =>
       Array.from(
         new Set(
-          agentStacks
+          channelStacks
             .map((stack) => stack.tag)
             .filter((tag) => typeof tag === "string" && tag.trim().length > 0)
         )
       ),
-    [agentStacks]
+    [channelStacks]
   );
   const managedLinks = managedStack?.serviceLinks ?? launchLinks;
   const selectedServices = useMemo(
@@ -297,10 +324,21 @@ export function AgentDetailPage() {
     setIsLaunchPanelOpen((value) => {
       const nextValue = !value;
       if (nextValue) {
-        void loadTags(hostName);
+        void loadTags(hostName, multiProjectAgent ? registryChannel : undefined);
       }
       return nextValue;
     });
+  }
+
+  function onRegistryChannelChange(nextChannel: RegistryChannel) {
+    if (nextChannel === registryChannel) return;
+
+    setRegistryChannel(nextChannel);
+    setLaunchVersion("");
+    setUpdateVersion("");
+    setLaunchError(null);
+    setLaunchOk(null);
+    void loadTags(hostName, nextChannel);
   }
 
   async function onLaunch(e: FormEvent) {
@@ -341,6 +379,7 @@ export function AgentDetailPage() {
             stackName,
             version,
             domain: domain || null,
+            registryChannel: multiProjectAgent ? registryChannel : null,
           }),
         }
       );
@@ -562,6 +601,31 @@ export function AgentDetailPage() {
         >
           Перейти к управлению запуском сервисов
         </button>
+        {multiProjectAgent && !isTagRoute && (
+          <div className="agent-detail__registry-switch" aria-label="Реестр образов">
+            <span
+              className={registryChannel === "stage" ? "agent-detail__registry-label agent-detail__registry-label--active" : "agent-detail__registry-label"}
+            >
+              stage
+            </span>
+            <label className="agent-detail__registry-toggle">
+              <input
+                type="checkbox"
+                checked={registryChannel === "release"}
+                onChange={(event) =>
+                  onRegistryChannelChange(event.target.checked ? "release" : "stage")
+                }
+                aria-label="Переключить между stage и release"
+              />
+              <span className="agent-detail__registry-slider" />
+            </label>
+            <span
+              className={registryChannel === "release" ? "agent-detail__registry-label agent-detail__registry-label--active" : "agent-detail__registry-label"}
+            >
+              release
+            </span>
+          </div>
+        )}
         {!isTagRoute && (
           <div className="agent-detail__summary-card">
             <h1 className="agent-detail__title">{hostName}</h1>
@@ -789,7 +853,10 @@ export function AgentDetailPage() {
                           type="button"
                           className="agent-detail__refresh"
                           disabled={tagsLoading || launching}
-                          onClick={() => void loadTags(hostName)}
+                          onClick={() => void loadTags(
+                            hostName,
+                            multiProjectAgent ? registryChannel : undefined
+                          )}
                         >
                           {tagsLoading ? "…" : "Обновить теги"}
                         </button>
@@ -842,7 +909,10 @@ export function AgentDetailPage() {
                 type="text"
                 className="agent-detail__input"
                 value={updateVersion}
-                onFocus={() => void loadTags(hostName)}
+                onFocus={() => void loadTags(
+                  hostName,
+                  multiProjectAgent ? registryChannel : undefined
+                )}
                 onChange={(e) => setUpdateVersion(e.target.value)}
                 placeholder={managedStack?.version?.trim() || "Введите или выберите версию"}
                 autoComplete="off"

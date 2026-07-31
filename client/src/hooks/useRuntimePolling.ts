@@ -14,6 +14,7 @@ import type {
   RuntimeSnapshotByHost,
   StackRuntimeItem,
   StatusUpdatedEvent,
+  RegistryChannel,
 } from "../types";
 
 function normalizeRuntimeStack(rawStack: unknown): StackRuntimeItem | null {
@@ -54,24 +55,29 @@ function mapRuntimeSnapshotByHost(
 export function useRuntimePolling() {
   const connectionRef = useRef<HubConnection | null>(null);
 
-  const loadTags = useCallback(async (agentHostName: string) => {
+  const loadTags = useCallback(async (
+    agentHostName: string,
+    registryChannel?: RegistryChannel
+  ) => {
     const trimmedHost = agentHostName.trim();
     if (!trimmedHost) {
       dispatchApp({
         type: "TAGS_FAILURE",
         hostName: "",
         error: "Не указано имя агента.",
+        registryChannel,
       });
       return;
     }
 
-    dispatchApp({ type: "TAGS_REQUEST", hostName: trimmedHost });
+    dispatchApp({ type: "TAGS_REQUEST", hostName: trimmedHost, registryChannel });
 
     const connection = connectionRef.current;
     if (!connection || connection.state !== HubConnectionState.Connected) {
       dispatchApp({
         type: "TAGS_FAILURE",
         hostName: trimmedHost,
+        registryChannel,
         error:
           "SignalR (/hubs/ui) не подключён. Обновите страницу или дождитесь соединения.",
       });
@@ -81,16 +87,18 @@ export function useRuntimePolling() {
     try {
       const raw = await connection.invoke<Array<{ tag?: string | null }>>(
         "GetHarborTags",
-        trimmedHost
+        trimmedHost,
+        registryChannel ?? null
       );
       const items = (raw ?? [])
         .map((x) => ({ tag: String(x?.tag ?? "").trim() }))
         .filter((x) => x.tag.length > 0);
-      dispatchApp({ type: "TAGS_SUCCESS", hostName: trimmedHost, items });
+      dispatchApp({ type: "TAGS_SUCCESS", hostName: trimmedHost, registryChannel, items });
     } catch (e) {
       dispatchApp({
         type: "TAGS_FAILURE",
         hostName: trimmedHost,
+        registryChannel,
         error: errMessage(e),
       });
     }

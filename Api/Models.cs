@@ -5,7 +5,8 @@ namespace AutoUpRelease.Api;
 public record StartBody(
     [property: JsonPropertyName("stackName")] string? StackName,
     [property: JsonPropertyName("domain")] string? Domain,
-    [property: JsonPropertyName("version")] string? Version);
+    [property: JsonPropertyName("version")] string? Version,
+    [property: JsonPropertyName("registryChannel")] string? RegistryChannel);
 
 public record AgentPasswordBody(
     [property: JsonPropertyName("password")] string? Password);

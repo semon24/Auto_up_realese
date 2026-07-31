@@ -25,7 +25,7 @@ internal static class DockerComposeUpSignalRMessages
                     return Task.CompletedTask;
 
                 Console.WriteLine(
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_up: id={request.Id}, StackName={request.StackName?.Trim() ?? "<null>"}, Version={request.Version?.Trim() ?? "<null>"}, Domain={request.Domain?.Trim()}");
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [agent] получена команда docker_compose_up: id={request.Id}, StackName={request.StackName?.Trim() ?? "<null>"}, Version={request.Version?.Trim() ?? "<null>"}, Domain={request.Domain?.Trim()}, RegistryChannel={request.RegistryChannel?.Trim() ?? "<null>"}");
 
                 _ = RunDockerComposeUpAsync(
                     connection,
@@ -56,6 +56,7 @@ internal static class DockerComposeUpSignalRMessages
                     request.StackName,
                     request.Version,
                     request.Domain,
+                    request.RegistryChannel,
                     CancellationToken.None));
 
             Console.WriteLine(
@@ -96,6 +97,7 @@ internal static class DockerComposeUpSignalRMessages
         public string? StackName { get; set; }
         public string? Version { get; set; }
         public string? Domain { get; set; }
+        public string? RegistryChannel { get; set; }
     }
 
     static async Task<(bool Ok, string? Error, object? Payload)> ToTupleAsync(Task<StartStackResult> task)

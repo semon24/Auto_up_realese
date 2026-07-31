@@ -1,4 +1,5 @@
 using AutoUpRelease.Agent;
+using AutoUpRelease.Agent.Configuration;
 
 namespace AutoUpRelease.Agent.Services.StartStackService;
 
@@ -11,6 +12,14 @@ public sealed partial class StartStackService
             StackWorkspaceManager.EnsureWorkspaceFiles(context.FolderForCopyDir, context.StackDir);
         else
             StackWorkspaceManager.EnsureStackWorkspace(context.FolderForCopyDir, context.StackDir);
+
+        if (!string.IsNullOrWhiteSpace(context.Registry))
+        {
+            await EnvFile.WriteTagAsync(
+                context.StackEnvFile,
+                RegistryChannels.RegistryEnvKey,
+                context.Registry);
+        }
 
         if (!File.Exists(context.StackStateFile))
             await File.WriteAllTextAsync(context.StackStateFile, "{}", ct);

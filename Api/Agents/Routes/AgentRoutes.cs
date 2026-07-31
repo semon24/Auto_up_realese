@@ -65,6 +65,10 @@ public static class AgentRoutes
             if (string.IsNullOrEmpty(version))
                 return Results.Json(new { error = "Нужен version" }, statusCode: 400);
 
+            var registryChannel = body?.RegistryChannel?.Trim().ToLowerInvariant();
+            if (registryChannel is not null && registryChannel is not ("stage" or "release"))
+                return Results.Json(new { error = "registryChannel должен быть stage или release" }, statusCode: 400);
+
             var domain = body?.Domain?.Trim();
             if (string.IsNullOrWhiteSpace(domain) &&
                 agentsJson.TryGet(hostName, out var agentInfo))
@@ -79,6 +83,7 @@ public static class AgentRoutes
                 stackName,
                 version,
                 domain,
+                registryChannel,
                 TimeSpan.FromMinutes(15),
                 ct);
 

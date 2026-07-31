@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using AutoUpRelease.Agent;
+using AutoUpRelease.Agent.Configuration;
 
 namespace AutoUpRelease.Agent.Services.StartStackService;
 
@@ -16,9 +17,18 @@ public sealed partial class StartStackService
         string? rawStackName,
         string? rawVersion,
         string? rawDomain,
+        string? rawRegistryChannel,
         CancellationToken ct = default)
     {
-        var context = BuildContext(rawStackName, rawVersion, rawDomain);
+        RegistryChannel? registryChannel = null;
+        if (_options.IsMultiProjectMode)
+        {
+            if (!RegistryChannels.TryParse(rawRegistryChannel, out var parsedChannel))
+                return StartStackResult.Fail("registryChannel должен быть stage или release");
+            registryChannel = parsedChannel;
+        }
+
+        var context = BuildContext(rawStackName, rawVersion, rawDomain, registryChannel);
         if (context is null)
             return StartStackResult.Fail("Нужны stackName и version");
 

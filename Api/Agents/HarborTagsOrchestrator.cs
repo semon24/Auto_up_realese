@@ -23,7 +23,11 @@ public sealed class HarborTagsOrchestrator(IHubContext<AgentHub> agentHub)
             tcs.TrySetResult(new TagsResult(false, Array.Empty<TagItem>(), error ?? "Harbor error"));
     }
 
-    public async Task<TagsResult> RequestTagsFromAgentAsync(string agentConnectionId, TimeSpan timeout, CancellationToken cancellationToken)
+    public async Task<TagsResult> RequestTagsFromAgentAsync(
+        string agentConnectionId,
+        string? registryChannel,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
         var id = Guid.NewGuid().ToString("N");
         var tcs = new TaskCompletionSource<TagsResult>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -31,7 +35,10 @@ public sealed class HarborTagsOrchestrator(IHubContext<AgentHub> agentHub)
 
         try
         {
-            await agentHub.Clients.Client(agentConnectionId).SendAsync("update_tags", new { Id = id }, cancellationToken);
+            await agentHub.Clients.Client(agentConnectionId).SendAsync(
+                "update_tags",
+                new { Id = id, RegistryChannel = registryChannel },
+                cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

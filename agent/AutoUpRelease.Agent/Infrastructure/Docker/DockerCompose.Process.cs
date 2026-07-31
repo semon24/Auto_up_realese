@@ -4,8 +4,6 @@ namespace AutoUpRelease.Agent;
 
 public static partial class DockerCompose
 {
-    static readonly TimeSpan DefaultComposeCaptureTimeout = TimeSpan.FromMinutes(5);
-
     static List<string> BuildComposeArgs(IReadOnlyList<string>? composeFiles, params string[] composeSubcommandArgs)
     {
         var all = new List<string> { "compose" };
@@ -81,10 +79,8 @@ public static partial class DockerCompose
         string workingDir,
         string fileName,
         string[] args,
-        IReadOnlyDictionary<string, string>? env = null,
-        TimeSpan? timeout = null)
+        IReadOnlyDictionary<string, string>? env = null)
     {
-        var isDockerCompose = IsDockerComposeCommand(fileName, args);
         if (IsDockerComposeCommand(fileName, args))
             Console.WriteLine($"[docker] exec(capture): {FormatCommand(fileName, args)} (cwd={workingDir})");
 
@@ -110,46 +106,17 @@ public static partial class DockerCompose
         using var p = Process.Start(psi);
         if (p == null)
             throw new InvalidOperationException($"Не удалось запустить {fileName}");
-        var effectiveTimeout = isDockerCompose ? timeout ?? DefaultComposeCaptureTimeout : timeout;
-        var stopwatch = Stopwatch.StartNew();
+
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
-        var waitForExitTask = p.WaitForExitAsync();
-        var completionTask = Task.WhenAll(stdoutTask, stderrTask, waitForExitTask);
+        var exitTask = p.WaitForExitAsync();
+        await Task.WhenAll(stdoutTask, stderrTask, exitTask);
 
-        if (effectiveTimeout is { } limit)
-        {
-            var completed = await Task.WhenAny(completionTask, Task.Delay(limit));
-            if (completed != completionTask)
-            {
-                try
-                {
-                    if (!p.HasExited)
-                        p.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                }
-
-                await completionTask;
-                if (isDockerCompose)
-                {
-                    Console.WriteLine(
-                        $"[docker] timeout(capture): {FormatCommand(fileName, args)} timeout_sec={limit.TotalSeconds:0} duration_ms={stopwatch.ElapsedMilliseconds}");
-                }
-
-                throw new TimeoutException(
-                    $"{FormatCommand(fileName, args)} превысил таймаут {limit.TotalSeconds:0} сек.");
-            }
-        }
-        else
-        {
-            await completionTask;
-        }
-
-        if (isDockerCompose)
-            Console.WriteLine($"[docker] done(capture): {FormatCommand(fileName, args)} exit={p.ExitCode} duration_ms={stopwatch.ElapsedMilliseconds}");
-        return (stdoutTask.Result, stderrTask.Result, p.ExitCode);
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+        if (IsDockerComposeCommand(fileName, args))
+            Console.WriteLine($"[docker] done(capture): {FormatCommand(fileName, args)} exit={p.ExitCode}");
+        return (stdout, stderr, p.ExitCode);
     }
 
     static bool IsDockerComposeCommand(string fileName, string[] args) =>

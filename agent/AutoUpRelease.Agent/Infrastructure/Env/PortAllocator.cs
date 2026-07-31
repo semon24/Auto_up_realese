@@ -24,8 +24,6 @@ public static class PortAllocator
             var usedPorts = new HashSet<int>();
             var dockerUsedHostPorts = await DockerCompose.GetPublishedTcpHostPortsAsync();
             var stateUsedPorts = await CollectPortsFromStateAsync(deployProjectsDir, stateFileName, stackName);
-            Console.WriteLine(
-                $"[port-allocator] start stack={stackName} range={scanMin}-{scanMax} keys={string.Join(", ", keys)} dockerUsed={dockerUsedHostPorts.Count} stateUsed={stateUsedPorts.Count}");
 
             foreach (var rawKey in keys)
             {
@@ -35,21 +33,13 @@ public static class PortAllocator
 
                 var port = FindFirstAvailable(scanMin, scanMax, usedPorts, dockerUsedHostPorts, stateUsedPorts);
                 if (port == null)
-                {
-                    Console.WriteLine(
-                        $"[port-allocator] failed stack={stackName} key={key} range={scanMin}-{scanMax} alreadyChosen={FormatPorts(usedPorts)} dockerUsedPreview={FormatPorts(dockerUsedHostPorts)} stateUsedPreview={FormatPorts(stateUsedPorts)}");
                     throw new InvalidOperationException(
                         $"Нет свободного TCP-порта для {key} в диапазоне {scanMin}-{scanMax}");
-                }
 
                 chosen[key] = port.Value;
                 usedPorts.Add(port.Value);
-                Console.WriteLine(
-                    $"[port-allocator] selected stack={stackName} key={key} port={port.Value}");
             }
 
-            Console.WriteLine(
-                $"[port-allocator] complete stack={stackName} assigned={string.Join(", ", chosen.Select(kv => $"{kv.Key}={kv.Value}"))}");
             return chosen;
         }
         finally
@@ -100,19 +90,5 @@ public static class PortAllocator
         }
 
         return used;
-    }
-
-    static string FormatPorts(IEnumerable<int> ports, int take = 20)
-    {
-        var ordered = ports
-            .Distinct()
-            .OrderBy(x => x)
-            .Take(take)
-            .ToArray();
-        if (ordered.Length == 0)
-            return "<empty>";
-
-        var suffix = ordered.Length == take ? ", ..." : string.Empty;
-        return string.Join(", ", ordered) + suffix;
     }
 }

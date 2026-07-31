@@ -20,6 +20,7 @@ public sealed partial class AgentSessionStore
         string stackName,
         string version,
         string? domain,
+        string? registryChannel,
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
@@ -51,7 +52,8 @@ public sealed partial class AgentSessionStore
                     id = id.ToString("N"),
                     stackName = stackName.Trim(),
                     version = version.Trim(),
-                    domain = string.IsNullOrWhiteSpace(domain) ? null : domain.Trim()
+                    domain = string.IsNullOrWhiteSpace(domain) ? null : domain.Trim(),
+                    registryChannel = string.IsNullOrWhiteSpace(registryChannel) ? null : registryChannel.Trim()
                 },
                 cancellationToken);
 

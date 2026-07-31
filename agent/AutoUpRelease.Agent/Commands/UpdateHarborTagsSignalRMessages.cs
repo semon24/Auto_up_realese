@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using AutoUpRelease.Agent.Integrations.Harbor;
+using AutoUpRelease.Agent.Configuration;
 
 namespace AutoUpRelease.Agent.Commands;
 
@@ -19,13 +20,21 @@ internal static class UpdateHarborTagsSignalRMessages
                 
                 try
                 {
+                    var repository = appOptions.HarborRepository;
+                    if (!string.IsNullOrWhiteSpace(request.RegistryChannel))
+                    {
+                        if (!RegistryChannels.TryParse(request.RegistryChannel, out var registryChannel))
+                            throw new InvalidOperationException("registryChannel должен быть stage или release");
+                        repository = RegistryChannels.GetSettings(registryChannel).HarborRepository;
+                    }
+
                     using var httpClient = new HttpClient();
                     var tags = await HarborTags.FetchAllAsync(
                         httpClient, 
                         appOptions.RegistryUrl, 
                         appOptions.RegistryUser, 
                         appOptions.RegistryPassword, 
-                        appOptions.HarborRepository);
+                        repository);
 
                     await connection.InvokeAsync(ServerMethodTagsUpdated, request.Id, true, tags, (string?)null);
                 }
@@ -39,5 +48,6 @@ internal static class UpdateHarborTagsSignalRMessages
     private sealed class UpdateTagsRequest
     {
         public string? Id { get; set; }
+        public string? RegistryChannel { get; set; }
     }
 }

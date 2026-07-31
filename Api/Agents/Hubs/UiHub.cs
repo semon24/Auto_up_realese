@@ -58,11 +58,15 @@ public sealed class UiHub(
     }
 
     /// <summary>Теги Harbor через конкретного агента (по имени хоста); API сам Harbor не дергает.</summary>
-    public async Task<TagItem[]> GetHarborTags(string agentHostName)
+    public async Task<TagItem[]> GetHarborTags(string agentHostName, string? registryChannel = null)
     {
         var normalizedHostName = agentHostName?.Trim() ?? "";
         if (normalizedHostName.Length == 0)
             throw new HubException("Не указано имя агента.");
+
+        var normalizedChannel = registryChannel?.Trim().ToLowerInvariant();
+        if (normalizedChannel is not null && normalizedChannel is not ("stage" or "release"))
+            throw new HubException("registryChannel должен быть stage или release.");
 
         if (!agentSessions.TryGetAgentConnectionForHost(normalizedHostName, out var connectionId))
             throw new HubException(
@@ -73,6 +77,7 @@ public sealed class UiHub(
         {
             result = await harborTagsOrchestrator.RequestTagsFromAgentAsync(
                 connectionId,
+                normalizedChannel,
                 TimeSpan.FromMinutes(2),
                 Context.ConnectionAborted);
         }
@@ -115,6 +120,7 @@ public sealed class UiHub(
             tag,
             snapshot.Running,
             snapshot.Version,
+            snapshot.RegistryChannel,
             snapshot.OperationType,
             snapshot.OperationStatus,
             snapshot.OperationError,
@@ -158,6 +164,7 @@ public sealed record RuntimeStackDto(
     string StackName,
     bool Running,
     string? Version,
+    string? RegistryChannel,
     string? OperationType,
     string? OperationStatus,
     string? OperationError,

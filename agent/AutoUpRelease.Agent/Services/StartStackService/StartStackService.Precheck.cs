@@ -1,10 +1,15 @@
 using AutoUpRelease.Agent;
+using AutoUpRelease.Agent.Configuration;
 
 namespace AutoUpRelease.Agent.Services.StartStackService;
 
 public sealed partial class StartStackService
 {
-    private StartStackContext? BuildContext(string? rawStackName, string? rawVersion, string? rawDomain)
+    private StartStackContext? BuildContext(
+        string? rawStackName,
+        string? rawVersion,
+        string? rawDomain,
+        RegistryChannel? registryChannel)
     {
         var stackName = rawStackName?.Trim();
         if (string.IsNullOrEmpty(stackName))
@@ -42,7 +47,8 @@ public sealed partial class StartStackService
             stackDir,
             stackEnvFile,
             stackStateFile,
-            isSingleProjectWorkspace);
+            isSingleProjectWorkspace,
+            registryChannel is null ? null : RegistryChannels.GetSettings(registryChannel.Value).Registry);
     }
 
     private async Task<string?> EnsureNotRunningAsync(StartStackContext context)

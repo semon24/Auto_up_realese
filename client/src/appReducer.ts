@@ -7,7 +7,9 @@ import type {
   RuntimeSnapshotByHost,
   StackRuntimeItem,
   TagItem,
+  RegistryChannel,
 } from "./types";
+import { buildTagCacheKey } from "./utils/registryChannel";
 
 export interface AppState {
   /** Harbor-теги, полученные через конкретного агента (ключ — имя хоста). */
@@ -45,10 +47,10 @@ export const initialAppState: AppState = {
 };
 
 export type AppAction =
-  | { type: "TAGS_REQUEST"; hostName: string }
-  | { type: "TAGS_SUCCESS"; hostName: string; items: TagItem[] }
+  | { type: "TAGS_REQUEST"; hostName: string; registryChannel?: RegistryChannel }
+  | { type: "TAGS_SUCCESS"; hostName: string; registryChannel?: RegistryChannel; items: TagItem[] }
   /** hostName пустой — положить текст в tagsClientError (валидация UI). */
-  | { type: "TAGS_FAILURE"; hostName: string; error: string }
+  | { type: "TAGS_FAILURE"; hostName: string; registryChannel?: RegistryChannel; error: string }
   | {
       type: "STATUS_SUCCESS";
       running: boolean;
@@ -76,11 +78,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "TAGS_REQUEST": {
       const trimmed = action.hostName.trim();
+      const cacheKey = buildTagCacheKey(trimmed, action.registryChannel);
       const nextErrByHost = { ...state.tagsErrorByHost };
-      if (trimmed) delete nextErrByHost[trimmed];
+      if (trimmed) delete nextErrByHost[cacheKey];
       return {
         ...state,
-        tagsLoadingHost: trimmed,
+        tagsLoadingHost: cacheKey,
         tagsClientError: null,
         tagsErrorByHost: nextErrByHost,
       };
@@ -88,11 +91,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "TAGS_SUCCESS":
       return {
         ...state,
-        tagsByHost: { ...state.tagsByHost, [action.hostName.trim()]: action.items },
+        tagsByHost: {
+          ...state.tagsByHost,
+          [buildTagCacheKey(action.hostName, action.registryChannel)]: action.items,
+        },
         tagsLoadingHost: null,
       };
     case "TAGS_FAILURE": {
       const trimmed = action.hostName.trim();
+      const cacheKey = buildTagCacheKey(trimmed, action.registryChannel);
       if (!trimmed) {
         return {
           ...state,
@@ -103,7 +110,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return {
         ...state,
         tagsLoadingHost: null,
-        tagsErrorByHost: { ...state.tagsErrorByHost, [trimmed]: action.error },
+        tagsErrorByHost: { ...state.tagsErrorByHost, [cacheKey]: action.error },
       };
     }
     case "STATUS_SUCCESS": {

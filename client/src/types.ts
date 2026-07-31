@@ -2,6 +2,8 @@ export interface TagItem {
   tag: string;
 }
 
+export type RegistryChannel = "stage" | "release";
+
 export interface TagsResponse {
   items?: TagItem[];
 }
@@ -63,6 +65,7 @@ export interface StackRuntimeItem {
   tag: string;
   stackName?: string | null;
   version?: string | null;
+  registryChannel?: RegistryChannel | null;
   running: boolean;
   operationType?: string | null;
   operationStatus?: string | null;

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using AutoUpRelease.Agent.Configuration;
 
 namespace AutoUpRelease.Agent;
 
@@ -36,6 +37,16 @@ public static class AgentsStateFileBuilder
                     if (!File.Exists(stateFilePath))
                         continue;
 
+                    var envFilePath = Path.Combine(stackDir, ".env");
+                    var registryChannel = RegistryChannels.TryFromEnvFile(envFilePath, out var parsedChannel)
+                        ? RegistryChannels.ToWireValue(parsedChannel)
+                        : null;
+                    if (registryChannel is null)
+                    {
+                        Console.Error.WriteLine(
+                            $"[agent-state] Не удалось определить registry channel из {envFilePath}");
+                    }
+
                     var stateLock = GetFileLock(stateFilePath);
                     await stateLock.WaitAsync();
                     try
@@ -43,7 +54,7 @@ public static class AgentsStateFileBuilder
                         var state = await ReadStateFileAsync(stateFilePath);
                         foreach (var kv in state.Stack)
                         {
-                            var aggregatedEntry = ToAggregatedEntry(kv.Value);
+                            var aggregatedEntry = ToAggregatedEntry(kv.Value, registryChannel);
                             if (aggregatedEntry.ServiceLinks is null && serviceLinkEnvKeys is not null)
                             {
                                 var stackEnvFile = StackWorkspaceManager.GetStackEnvFile(deployProjectsDir, kv.Key);
@@ -94,13 +105,17 @@ public static class AgentsStateFileBuilder
 
             if (File.Exists(stateFilePath))
             {
+                var envFilePath = Path.Combine(projectDir, ".env");
+                var registryChannel = RegistryChannels.TryFromEnvFile(envFilePath, out var parsedChannel)
+                    ? RegistryChannels.ToWireValue(parsedChannel)
+                    : null;
                 var stateLock = GetFileLock(stateFilePath);
                 await stateLock.WaitAsync();
                 try
                 {
                     var state = await ReadStateFileAsync(stateFilePath);
                     foreach (var kv in state.Stack)
-                        stacks[kv.Key] = ToAggregatedEntry(kv.Value);
+                        stacks[kv.Key] = ToAggregatedEntry(kv.Value, registryChannel);
                 }
                 finally
                 {
@@ -149,7 +164,7 @@ public static class AgentsStateFileBuilder
         File.Move(temp, filePath, overwrite: true);
     }
 
-    static AggregatedStackEntry ToAggregatedEntry(StackEntry entry)
+    static AggregatedStackEntry ToAggregatedEntry(StackEntry entry, string? registryChannel)
     {
         var running = entry.Services.Values.Any(s =>
             string.Equals(s.State, "running", StringComparison.OrdinalIgnoreCase));
@@ -158,6 +173,7 @@ public static class AgentsStateFileBuilder
         {
             Running = running,
             Version = entry.Version,
+            RegistryChannel = registryChannel,
             OperationType = entry.Operation?.Type,
             OperationStatus = entry.Operation?.Status,
             OperationError = entry.Operation?.Error,
@@ -183,6 +199,7 @@ public static class AgentsStateFileBuilder
     {
         public bool Running { get; set; }
         public string? Version { get; set; }
+        public string? RegistryChannel { get; set; }
         public string? OperationType { get; set; }
         public string? OperationStatus { get; set; }
         public string? OperationError { get; set; }

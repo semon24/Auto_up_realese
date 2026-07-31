@@ -1,7 +1,8 @@
 import { createContext, useContext, type ReactNode } from "react";
+import type { RegistryChannel } from "./types";
 
 export interface PollingApi {
-  loadTags: (agentHostName: string) => void;
+  loadTags: (agentHostName: string, registryChannel?: RegistryChannel) => void;
   loadStatus: () => Promise<void>;
 }
 
